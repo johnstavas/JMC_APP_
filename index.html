@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JMC Financial Model v10</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #070d18; }
+      @media (max-width: 900px) {
+        .mobile-notice { display: block !important; }
+      }
+      @media print {
+        body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        input[type="range"], button { display: none !important; }
+        .mobile-notice { display: none !important; }
+        div[style*="min-height: 100vh"] { min-height: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
