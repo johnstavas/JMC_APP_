@@ -192,12 +192,21 @@ export default function App(){
   // tooltip
   const [tip, setTip] = useState({show:false,text:"",x:0,y:0});
   const [tipsOn, setTipsOn] = useState(!investorMode);
+  const tipTimer = useRef(null);
   const T = (text) => tipsOn ? {
-    onMouseEnter:(e)=>setTip({show:true,text:TIPS[text]||text,x:e.clientX,y:e.clientY}),
+    onMouseEnter:(e)=>{clearTimeout(tipTimer.current);setTip({show:true,text:TIPS[text]||text,x:e.clientX,y:e.clientY});},
     onMouseMove:(e)=>setTip(t=>({...t,x:e.clientX,y:e.clientY})),
-    onMouseLeave:()=>setTip(t=>({...t,show:false})),
+    onMouseLeave:()=>{tipTimer.current=setTimeout(()=>setTip(t=>({...t,show:false})),80);},
     style:{cursor:"help"},
   } : {style:{cursor:"default"}};
+
+  // dismiss tooltip on scroll or click anywhere
+  useEffect(()=>{
+    const dismiss=()=>setTip(t=>({...t,show:false}));
+    window.addEventListener("scroll",dismiss,true);
+    window.addEventListener("click",dismiss,true);
+    return ()=>{window.removeEventListener("scroll",dismiss,true);window.removeEventListener("click",dismiss,true);};
+  },[]);
 
   const [tab,setTab]=useState(0);
   const [phase,setPhase]=useState("3P");
@@ -323,7 +332,8 @@ export default function App(){
         <div style={{position:"fixed",left:Math.min(tip.x+12,window.innerWidth-250),top:Math.max(tip.y-6,8),
           zIndex:99999,background:"#0f172a",color:"#e2e8f0",border:"1px solid #334155",
           borderRadius:7,padding:"7px 10px",maxWidth:240,fontSize:10,lineHeight:1.55,
-          boxShadow:"0 6px 20px #000b",pointerEvents:"none",fontFamily:"monospace",whiteSpace:"pre-line"}}>
+          boxShadow:"0 6px 20px #000b",pointerEvents:"none",fontFamily:"monospace",whiteSpace:"pre-line",
+          transition:"opacity 0.15s ease",opacity:tip.show?1:0}}>
           {tip.text.split("\n").map((line,i)=>(
             <div key={i} style={{color:i===0?"#fbbf24":"#64748b",fontWeight:i===0?"bold":"normal",marginBottom:i===0?3:0,fontSize:i===0?10:9}}>{line}</div>
           ))}
