@@ -189,24 +189,31 @@ export default function App(){
   const suStartupCost=useMemo(()=>STARTUP_SECTIONS.filter(s=>!s.monthly).reduce((s,sec)=>s+suTotals[sec.key],0),[suTotals]);
   const suMonthlyBurn=useMemo(()=>STARTUP_SECTIONS.filter(s=>s.monthly).reduce((s,sec)=>s+suTotals[sec.key],0),[suTotals]);
 
-  // tooltip
+  // tooltip — global mousemove approach so it never sticks
   const [tip, setTip] = useState({show:false,text:"",x:0,y:0});
   const [tipsOn, setTipsOn] = useState(!investorMode);
-  const tipTimer = useRef(null);
   const T = (text) => tipsOn ? {
-    onMouseEnter:(e)=>{clearTimeout(tipTimer.current);setTip({show:true,text:TIPS[text]||text,x:e.clientX,y:e.clientY});},
-    onMouseMove:(e)=>setTip(t=>({...t,x:e.clientX,y:e.clientY})),
-    onMouseLeave:()=>{tipTimer.current=setTimeout(()=>setTip(t=>({...t,show:false})),80);},
+    "data-tip": text,
     style:{cursor:"help"},
   } : {style:{cursor:"default"}};
 
-  // dismiss tooltip on scroll or click anywhere
   useEffect(()=>{
-    const dismiss=()=>setTip(t=>({...t,show:false}));
+    if(!tipsOn) return;
+    const onMove=(e)=>{
+      const el=e.target.closest("[data-tip]");
+      if(el){
+        const key=el.getAttribute("data-tip");
+        setTip({show:true,text:TIPS[key]||key,x:e.clientX,y:e.clientY});
+      } else {
+        setTip(t=>t.show?{...t,show:false}:t);
+      }
+    };
+    const dismiss=()=>setTip(t=>t.show?{...t,show:false}:t);
+    window.addEventListener("mousemove",onMove,true);
     window.addEventListener("scroll",dismiss,true);
     window.addEventListener("click",dismiss,true);
-    return ()=>{window.removeEventListener("scroll",dismiss,true);window.removeEventListener("click",dismiss,true);};
-  },[]);
+    return ()=>{window.removeEventListener("mousemove",onMove,true);window.removeEventListener("scroll",dismiss,true);window.removeEventListener("click",dismiss,true);};
+  },[tipsOn]);
 
   const [tab,setTab]=useState(0);
   const [phase,setPhase]=useState("3P");
