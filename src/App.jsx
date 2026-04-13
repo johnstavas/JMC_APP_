@@ -99,7 +99,41 @@ const PKG_COLORS = {
   "Cryovac":"#22c55e","Mixed":"#a855f7"
 };
 
-const TABS = ["Executive Summary","① SKU P&L","② Scenarios","③ Competitors","④ Processing Scale","⑤ Wholesale","⑥ Cut Reference"];
+const TABS = ["Executive Summary","① SKU P&L","② Scenarios","③ Competitors","④ Processing Scale","⑤ Wholesale","⑥ Cut Reference","⑦ Startup Costs"];
+
+const STARTUP_SECTIONS = [
+  {key:"facility",title:"Facility / Buildout",monthly:false,fields:[
+    ["leaseDeposit","Lease Deposit"],["firstMonthRent","First Month Rent"],["buildoutRenovations","Buildout / Renovations"],
+    ["flooring","Flooring"],["electrical","Electrical Upgrades"],["hvac","HVAC"],["plumbingDrainage","Plumbing / Drainage"]]},
+  {key:"refrigeration",title:"Refrigeration & Cold Storage",monthly:false,fields:[
+    ["walkInCooler","Walk-in Cooler"],["walkInFreezer","Walk-in Freezer"],["displayCases","Display Cases"],
+    ["reachInFridges","Reach-in Refrigerators"],["iceMachine","Ice Machine"],["dryAgingFridge","Dry-aging Fridge"]]},
+  {key:"equipment",title:"Butchering Equipment",monthly:false,fields:[
+    ["bandSaw","Band Saw"],["meatGrinder","Meat Grinder"],["sausageStuffer","Sausage Stuffer"],["meatSlicer","Meat Slicer"],
+    ["tenderizer","Tenderizer / Cuber"],["cuttingTables","Cutting Tables"],["knives","Knives"],["sharpeningSystem","Sharpening System"]]},
+  {key:"packaging",title:"Packaging & Labeling",monthly:false,fields:[
+    ["vacuumSealer","Vacuum Sealer"],["wrappingStation","Wrapping Station"],["traysAndFilm","Trays / Film"],
+    ["digitalScales","Digital Scales"],["labelPrinter","Label Printer"],["labels","Labels"]]},
+  {key:"supplyChain",title:"Supply Chain & Inventory",monthly:false,fields:[
+    ["initialInventory","Initial Inventory"],["transport","Transport"],["coldChainLogistics","Cold Chain Logistics"],["storageOverflow","Storage Overflow"]]},
+  {key:"licensing",title:"Licensing, Permits & Compliance",monthly:false,fields:[
+    ["businessLicense","Business License"],["healthPermit","Health Permit"],["foodSafetyCertification","Food Safety Certification"],
+    ["weightsAndMeasures","Weights & Measures"],["wasteDisposal","Waste Disposal Setup"],["insuranceLic","Insurance"]]},
+  {key:"retail",title:"Retail & Customer Experience",monthly:false,fields:[
+    ["posSystem","POS System"],["counterBuild","Counter / Checkout Build"],["signage","Signage"],["branding","Branding"],["website","Website / Online Ordering"]]},
+  {key:"sanitation",title:"Sanitation & Safety",monthly:false,fields:[
+    ["sinks","Commercial Sinks"],["cleaningSupplies","Cleaning Supplies"],["ppe","PPE / Aprons / Gloves"],["pestControl","Pest Control"]]},
+  {key:"valueAdd",title:"Value-Add Production",monthly:false,fields:[
+    ["smoker","Smoker"],["dehydrator","Dehydrator"],["marinades","Marinade Setup"],["spices","Spices / Seasonings"]]},
+  {key:"laborMonthly",title:"Labor (Monthly)",monthly:true,fields:[
+    ["headButcher","Head Butcher"],["assistantButchers","Assistant Butchers"],["retailStaff","Retail Staff"],["admin","Admin / Bookkeeping"]]},
+  {key:"fixedMonthly",title:"Fixed Monthly Operating Costs",monthly:true,fields:[
+    ["rentMo","Rent"],["utilities","Utilities"],["insuranceMo","Insurance"],["internetPhone","Internet / Phone"],
+    ["software","Software"],["wasteRemoval","Waste Removal"],["maintenance","Maintenance / Repairs"],["marketing","Marketing"],["miscellaneous","Miscellaneous"]]},
+];
+
+const buildStartupState=()=>{const s={};STARTUP_SECTIONS.forEach(sec=>{s[sec.key]={};sec.fields.forEach(([k])=>{s[sec.key][k]="";});});return s;};
+const parseAmt=(v)=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 
 const TIPS = {
   retailRevMo:   "MONTHLY RETAIL REVENUE\nTotal sales from your JMC butcher shop this month.\n= Blended sell price × lbs sold.\nDoes NOT include wholesale or hub revenue.",
@@ -147,6 +181,13 @@ export default function App(){
   // read-only investor mode via ?view=investor
   const [investorMode] = useState(()=>new URLSearchParams(window.location.search).get("view")==="investor");
   const printRef = useRef(null);
+
+  // startup calculator
+  const [suData,setSuData]=useState(buildStartupState);
+  const updateSuField=(secKey,fieldKey,value)=>setSuData(p=>({...p,[secKey]:{...p[secKey],[fieldKey]:value}}));
+  const suTotals=useMemo(()=>{const t={};STARTUP_SECTIONS.forEach(sec=>{t[sec.key]=sec.fields.reduce((s,[k])=>s+parseAmt(suData[sec.key][k]),0);});return t;},[suData]);
+  const suStartupCost=useMemo(()=>STARTUP_SECTIONS.filter(s=>!s.monthly).reduce((s,sec)=>s+suTotals[sec.key],0),[suTotals]);
+  const suMonthlyBurn=useMemo(()=>STARTUP_SECTIONS.filter(s=>s.monthly).reduce((s,sec)=>s+suTotals[sec.key],0),[suTotals]);
 
   // tooltip
   const [tip, setTip] = useState({show:false,text:"",x:0,y:0});
@@ -252,14 +293,14 @@ export default function App(){
   const maxWS=(menuP,portOz,loss,fcPct)=>(menuP*fcPct)/((portOz/(1-loss))/16);
 
   const S=(l,v,setV,min,max,step2,fmt2,c,tipKey)=>(
-    <div key={l} style={{flex:1,minWidth:100}}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+    <div key={l} style={{flex:1,minWidth:130,padding:"2px 4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
         <span {...(tipKey?T(tipKey):{})} style={{fontSize:9,color:"#475569",fontFamily:"monospace",textTransform:"uppercase",
           borderBottom:tipKey?"1px dashed #374151":"none",cursor:tipKey?"help":"default"}}>{l}</span>
         <span style={{fontSize:11,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{fmt2(v)}</span>
       </div>
       <input type="range" min={min} max={max} step={step2} value={v}
-        onChange={e=>setV(parseFloat(e.target.value))} style={{width:"100%",accentColor:c}}/>
+        onChange={e=>setV(parseFloat(e.target.value))} style={{width:"100%",accentColor:c,height:6}}/>
     </div>
   );
 
@@ -356,12 +397,12 @@ export default function App(){
       {/* RETAIL SLIDERS */}
       <div style={{background:"#0c1628",borderBottom:"1px solid #1a2740",padding:"10px 22px",display:investorMode?"none":undefined}}>
         <div style={{maxWidth:1300,margin:"0 auto",display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
-          {S("Retail Lbs/Month",lbs,setLbs,500,12000,100,v=>v.toLocaleString()+"lb","#c084fc","retailRevMo")}
-          {S("Trip Cost $",tripCost,setTripCost,1000,5000,100,v=>"$"+v.toLocaleString(),"#0ea5e9","trans")}
+          {S("Retail Lbs/Month",lbs,setLbs,500,12000,250,v=>v.toLocaleString()+"lb","#c084fc","retailRevMo")}
+          {S("Trip Cost $",tripCost,setTripCost,1000,5000,200,v=>"$"+v.toLocaleString(),"#0ea5e9","trans")}
           {S("Trips/Month",trips,setTrips,1,4,1,v=>v+"×","#0ea5e9","trans")}
-          {S("Shrink %",shrink,setShrink,0.03,0.15,0.005,v=>Math.round(v*100)+"%","#f97316","cogs")}
-          {S("Farm Base/lb",farmBase,setFarmBase,4.5,9.0,0.05,v=>"$"+fmt(v),"#ef4444","farm")}
-          {S("LA Fixed/Month $",fixed,setFixed,15000,40000,500,v=>"$"+v.toLocaleString(),"#f87171","jmcNetMo")}
+          {S("Shrink %",shrink,setShrink,0.03,0.15,0.01,v=>Math.round(v*100)+"%","#f97316","cogs")}
+          {S("Farm Base/lb",farmBase,setFarmBase,4.5,9.0,0.10,v=>"$"+fmt(v),"#ef4444","farm")}
+          {S("LA Fixed/Month $",fixed,setFixed,15000,40000,1000,v=>"$"+v.toLocaleString(),"#f87171","jmcNetMo")}
           <div {...T("trans")} style={{background:"#070d18",borderRadius:5,padding:"5px 10px",fontSize:10,fontFamily:"monospace",color:"#64748b",border:"1px solid #1e293b",flexShrink:0}}>
             <div>Freight: <b style={{color:"#0ea5e9"}}>${fmt(freight)}/lb</b></div>
             <div style={{fontSize:9}}>${(tripCost*trips).toLocaleString()}/mo ÷ {lbs.toLocaleString()}lb</div>
@@ -630,10 +671,10 @@ export default function App(){
                         <td style={{padding:"7px 8px"}}><span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span></td>
                         <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{Math.round(s.mix*100)}%</td>
                         <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{Math.round(s.spLbs)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end"}}>
-                            <input type="range" min={5} max={120} step={0.5} value={sp} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:50,accentColor:c}}/>
-                            <input type="number" value={sp} step={0.5} min={5} max={120} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:50,background:"#1e293b",color:"#f59e0b",border:"1px solid #374151",borderRadius:4,padding:"2px 4px",fontFamily:"monospace",fontSize:12,textAlign:"right"}}/>
+                        <td style={{padding:"12px 18px",textAlign:"right",minWidth:250}}>
+                          <div style={{display:"flex",alignItems:"center",gap:14,justifyContent:"flex-end"}}>
+                            <input type="range" min={5} max={120} step={1} value={sp} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:100,accentColor:c}}/>
+                            <input type="number" value={sp} step={1} min={5} max={120} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:85,background:"#1e293b",color:"#f59e0b",border:"1px solid #374151",borderRadius:5,padding:"6px 10px",fontFamily:"monospace",fontSize:14,textAlign:"right"}}/>
                           </div>
                         </td>
                         <td {...T("vsComp")} style={{padding:"7px 8px",textAlign:"right",color:s.compDelta>=0?"#f87171":"#4ade80",fontWeight:"bold"}}>{s.compDelta>=0?"+":""}{fmt(s.compDelta)}</td>
@@ -914,13 +955,13 @@ export default function App(){
                         </td>
                         <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#22c55e",cursor:"help"}}>{s.uLo?"$"+fmt(s.uLo):"—"}</td>
                         <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#22c55e",cursor:"help"}}>{s.uHi?"$"+fmt(s.uHi):"—"}</td>
-                        <td style={{padding:"6px 8px",textAlign:"right"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"flex-end"}}>
-                            <div style={{position:"relative",width:70}}>
-                              <input type="range" min={2} max={70} step={0.25} value={s.wsP} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:"100%",accentColor:inRange?"#fbbf24":"#94a3b8"}}/>
+                        <td style={{padding:"10px 16px",textAlign:"right",minWidth:230}}>
+                          <div style={{display:"flex",alignItems:"center",gap:12,justifyContent:"flex-end"}}>
+                            <div style={{position:"relative",width:90}}>
+                              <input type="range" min={2} max={70} step={1} value={s.wsP} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:"100%",accentColor:inRange?"#fbbf24":"#94a3b8"}}/>
                               {s.uLo&&<div style={{position:"absolute",top:7,height:3,borderRadius:2,background:"#22c55e55",pointerEvents:"none",left:`${(s.uLo/70)*100}%`,width:`${((s.uHi-s.uLo)/70)*100}%`}}/>}
                             </div>
-                            <input type="number" value={s.wsP} step={0.25} min={2} max={70} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:50,background:"#1a1000",color:"#fbbf24",border:`1px solid ${inRange?"#92400e":"#374151"}`,borderRadius:4,padding:"2px 4px",fontFamily:"monospace",fontSize:12,textAlign:"right"}}/>
+                            <input type="number" value={s.wsP} step={1} min={2} max={70} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:85,background:"#1a1000",color:"#fbbf24",border:`1px solid ${inRange?"#92400e":"#374151"}`,borderRadius:5,padding:"6px 10px",fontFamily:"monospace",fontSize:14,textAlign:"right"}}/>
                           </div>
                           <div style={{fontSize:8,textAlign:"right",color:inRange?"#22c55e":"#64748b",fontFamily:"monospace",marginTop:1}}>{inRange?"✓ in USDA range":s.wsP<(s.uLo||0)?"↓ below market":"↑ above market"}</div>
                         </td>
@@ -1106,6 +1147,75 @@ export default function App(){
             <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:7,padding:"10px 14px",fontSize:9,color:"#475569",fontFamily:"monospace",lineHeight:1.8}}>
               <b style={{color:"#f59e0b"}}>SHELF LIFE KEY</b> · Fridge Retail = butcher paper or foam tray (open case) · Fridge Vac = cryovac/vacuum seal (wholesale ready) · Frozen = frozen in any packaging ·
               <b style={{color:"#f87171",marginLeft:4}}>Red-bordered rows have special handling requirements</b> · All shelf life in days · Source: jmc_cuts_data.js · USDA FSIS guidelines
+            </div>
+          </div>
+        )}
+
+        {/* ══ TAB 7: STARTUP COSTS ══ */}
+        {tab===7&&(
+          <div>
+            {/* KPI Cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
+              {[
+                {label:"Total Startup Cost",val:money(suStartupCost),color:"#f59e0b",sub:"One-time launch expenses"},
+                {label:"Monthly Burn",val:money(suMonthlyBurn),color:"#60a5fa",sub:"Recurring operating costs"},
+                {label:"12-Month Carry",val:money(suMonthlyBurn*12),color:"#c084fc",sub:"Annual operating cost projection"},
+              ].map(k=>(
+                <div key={k.label} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"18px 20px"}}>
+                  <div style={{fontSize:9,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em"}}>{k.label}</div>
+                  <div style={{fontSize:24,fontWeight:"bold",color:k.color,fontFamily:"monospace",marginTop:6}}>{k.val}</div>
+                  <div style={{fontSize:10,color:"#374151",marginTop:4}}>{k.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Reset Button */}
+            <div style={{marginBottom:14,textAlign:"right"}}>
+              <button onClick={()=>setSuData(buildStartupState())} style={{padding:"7px 16px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,border:"1px solid #374151",background:"#1e293b",color:"#94a3b8"}}>
+                Reset All Fields
+              </button>
+            </div>
+
+            {/* Section Cards */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              {STARTUP_SECTIONS.map(sec=>(
+                <div key={sec.key} style={{background:"#0c1628",border:`1px solid ${sec.monthly?"#1e3a5f":"#1e293b"}`,borderRadius:10,padding:"18px 20px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:10}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:"bold",color:"#e2e8f0"}}>{sec.title}</div>
+                      <div style={{fontSize:9,color:sec.monthly?"#60a5fa":"#475569",fontFamily:"monospace",marginTop:2}}>
+                        {sec.monthly?"Monthly operating cost":"One-time startup cost"}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:8,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em"}}>Section Total</div>
+                      <div style={{fontSize:16,fontWeight:"bold",color:sec.monthly?"#60a5fa":"#f59e0b",fontFamily:"monospace"}}>{money(suTotals[sec.key])}</div>
+                    </div>
+                  </div>
+                  {sec.fields.map(([fieldKey,label])=>(
+                    <div key={fieldKey} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1a2740"}}>
+                      <label style={{fontSize:11,color:"#94a3b8",fontFamily:"monospace"}}>{label}</label>
+                      <input type="number" inputMode="decimal" min="0" step="any" placeholder="0"
+                        value={suData[sec.key][fieldKey]}
+                        onChange={e=>updateSuField(sec.key,fieldKey,e.target.value)}
+                        style={{width:110,background:"#070d18",color:"#e2e8f0",border:"1px solid #374151",borderRadius:5,padding:"5px 10px",fontFamily:"monospace",fontSize:12,textAlign:"right",outline:"none"}}/>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Notes */}
+            <div style={{marginTop:16,background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"16px 20px"}}>
+              <div style={{fontSize:11,color:"#e2e8f0",fontWeight:"bold",marginBottom:10}}>Notes</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div style={{background:"#070d18",borderRadius:7,padding:"12px 14px",fontSize:10,color:"#64748b",fontFamily:"monospace",lineHeight:1.6}}>
+                  <b style={{color:"#f59e0b"}}>Startup costs</b> are your one-time launch expenses like buildout, equipment, permits, and inventory.
+                </div>
+                <div style={{background:"#070d18",borderRadius:7,padding:"12px 14px",fontSize:10,color:"#64748b",fontFamily:"monospace",lineHeight:1.6}}>
+                  <b style={{color:"#60a5fa"}}>Monthly burn</b> is what it costs you to keep the shop open each month before product margin is added.
+                </div>
+              </div>
             </div>
           </div>
         )}
