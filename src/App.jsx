@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, RadialBarChart, RadialBar } from "recharts";
+import { TrendingUp, DollarSign, Percent, Scale, Beef, Store, Factory, Truck } from "lucide-react";
 
 const SKUS = [
   { id:"ribeye",    label:"Ribeye",       cat:"Premium",  mix:0.10, price:49.99, farm:7.31, p3:2.0401, pO:0.7472, ws:20.00, comp:49.0  },
@@ -37,15 +39,16 @@ const REST_BUYERS = [
     {cut:"ribeye",menu:65,oz:14,loss:0.25,fc:0.30},{cut:"filet",menu:55,oz:8,loss:0.22,fc:0.29}]},
 ];
 
-const COMPS = [
+const COMPS_DEFAULT = [
   {store:"Cream Co./Cookbook",tier:"Premium Butcher",items:[{n:"Ribeye",p:66.00},{n:"NY Strip",p:57.38},{n:"Hanger",p:42.90},{n:"Ground",p:14.50}]},
   {store:"McCall's/Atwater",  tier:"Premium Butcher",items:[{n:"Ribeye DA",p:59.99},{n:"Ribeye",p:47.00},{n:"NY Strip",p:42.00},{n:"Filet",p:69.99},{n:"Flat Iron",p:28.99},{n:"Short Ribs",p:27.50},{n:"Ground GF",p:14.99}]},
   {store:"Sprouts/Eagle Rock", tier:"Natural Market", items:[{n:"Ribeye GF",p:27.99},{n:"NY Strip GF",p:24.99},{n:"Filet GF",p:34.99},{n:"Stew GF",p:12.99},{n:"Ground GF",p:9.49}]},
   {store:"Vons/Eagle Rock",    tier:"Mass Market",    items:[{n:"Ribeye Prime",p:38.99},{n:"NY Strip Prime",p:29.99},{n:"Ground 90/10",p:6.99}]},
   {store:"Trader Joe's/ER",    tier:"Mass Market",    items:[{n:"Ribeye Choice",p:21.99},{n:"Filet Choice",p:35.99},{n:"Ground 80/20",p:6.49}]},
 ];
+const TIER_OPTIONS = ["Premium Butcher","Natural Market","Mass Market","Specialty","Online"];
 
-const CAT_C = {Premium:"#f59e0b",Core:"#3b82f6",Traffic:"#22c55e",Everyday:"#64748b"};
+const CAT_C = {Premium:"#b45309",Core:"#3b82f6",Traffic:"#15803d",Everyday:"var(--text-muted)"};
 
 // ── JMC CUTS DATA (from jmc_cuts_data.js) ───────────────────────
 const JMC_CUTS = [
@@ -95,8 +98,8 @@ const SKU_CUT_MAP = {
 
 const PRIMALS = [...new Set(JMC_CUTS.map(c=>c.primal))];
 const PKG_COLORS = {
-  "Foam tray":"#3b82f6","Butcher paper":"#f59e0b",
-  "Cryovac":"#22c55e","Mixed":"#a855f7"
+  "Foam tray":"#3b82f6","Butcher paper":"#b45309",
+  "Cryovac":"#15803d","Mixed":"#7c3aed"
 };
 
 const TABS = ["Executive Summary","① SKU P&L","② Scenarios","③ Competitors","④ Processing Scale","⑤ Wholesale","⑥ Cut Reference","⑦ Startup Costs"];
@@ -171,16 +174,31 @@ function hubCalc(numLoc,capPerPlant,fixedPerPlant,extH,lbPerHead,rLb,rHead,varCP
 }
 
 const MLABEL = ({children}) => (
-  <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,marginLeft:4,background:"#1e3a5f",color:"#60a5fa",border:"1px solid #1e40af44",fontFamily:"monospace"}}>MONTHLY</span>
+  <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,marginLeft:4,background:"#dbeafe",color:"#1d4ed8",border:"1px solid #93c5fd",fontWeight:600,letterSpacing:"0.03em"}}>MONTHLY</span>
 );
 const YLABEL = () => (
-  <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,marginLeft:4,background:"#1a1a2e",color:"#a78bfa",border:"1px solid #6d28d944",fontFamily:"monospace"}}>ANNUAL</span>
+  <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,marginLeft:4,background:"#ede9fe",color:"#6d28d9",border:"1px solid #c4b5fd",fontWeight:600,letterSpacing:"0.03em"}}>ANNUAL</span>
 );
 
 export default function App(){
   // read-only investor mode via ?view=investor
   const [investorMode] = useState(()=>new URLSearchParams(window.location.search).get("view")==="investor");
   const printRef = useRef(null);
+
+  // dark mode
+  const [dark,setDark]=useState(()=>{
+    const saved=localStorage.getItem("jmc-dark");
+    if(saved!==null) return saved==="true";
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches||false;
+  });
+  const [companyName,setCompanyName]=useState(()=>localStorage.getItem("jmc-company-name")||"Joseph Meat Company");
+  const [companyDesc,setCompanyDesc]=useState(()=>localStorage.getItem("jmc-company-desc")||"Vertically-integrated beef operation — Nebraska-sourced, LA-retail. Premium whole-animal butcher shop with wholesale channel and owned processing hub expansion path.");
+  useEffect(()=>{localStorage.setItem("jmc-company-name",companyName);},[companyName]);
+  useEffect(()=>{localStorage.setItem("jmc-company-desc",companyDesc);},[companyDesc]);
+  useEffect(()=>{
+    document.documentElement.classList.toggle("dark",dark);
+    localStorage.setItem("jmc-dark",dark);
+  },[dark]);
 
   // startup calculator
   const [suData,setSuData]=useState(buildStartupState);
@@ -245,6 +263,34 @@ export default function App(){
   const [rHead,setRHead]=useState(200);
   const [varCPH,setVarCPH]=useState(73.65);
 
+  // competitors
+  const [compData,setCompData]=useState(()=>COMPS_DEFAULT.map(s=>({...s,items:s.items.map(it=>({...it}))})));
+  const updateComp=(si,field,val)=>setCompData(d=>d.map((s,i)=>i===si?{...s,[field]:val}:s));
+  const updateCompItem=(si,ii,field,val)=>setCompData(d=>d.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[field]:field==="p"?parseFloat(val)||0:val}:it)}:s));
+  const addCompItem=(si)=>setCompData(d=>d.map((s,i)=>i===si?{...s,items:[...s.items,{n:"New Cut",p:0}]}:s));
+  const removeCompItem=(si,ii)=>setCompData(d=>d.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s));
+  const addCompStore=()=>setCompData(d=>[...d,{store:"New Store",tier:"Mass Market",items:[{n:"Cut",p:0}]}]);
+  const removeCompStore=(si)=>setCompData(d=>d.filter((_,i)=>i!==si));
+
+  // compute average comp price per SKU label from editable comp data
+  const compAvg=useMemo(()=>{
+    const map={};
+    const SKU_MATCH={"Ribeye":["ribeye"],"NY Strip":["nystrip"],"Filet":["filet"],"Flat Iron":["flatIron"],"Hanger":["hanger"],"Skirt":["skirt"],"Ground":["ground"],"Stew":["stew"],"Brisket":["brisket"],"Short Ribs":["shortRibs"],"Roasts":["roasts"],"T-Bone":["tbone"]};
+    Object.keys(SKU_MATCH).forEach(label=>{
+      const prices=[];
+      compData.forEach(store=>{
+        store.items.forEach(item=>{
+          if(item.n.toLowerCase().includes(label.toLowerCase()) && item.p>0) prices.push(item.p);
+        });
+      });
+      if(prices.length>0){
+        const avg=prices.reduce((s,v)=>s+v,0)/prices.length;
+        SKU_MATCH[label].forEach(id=>{map[id]=avg;});
+      }
+    });
+    return map;
+  },[compData]);
+
   const freight = (tripCost*trips)/lbs;
   const cardFee = 0.02;
 
@@ -252,8 +298,9 @@ export default function App(){
     const fa=farmBase+(s.farm-6.54), pc=phase==="3P"?s.p3:s.pO;
     const spLbs=lbs*s.mix, cogs=(fa+pc+freight)*(1+shrink), sp=prices[s.id];
     const gpLb=sp-cogs;
-    return{...s,fa,pc,spLbs,cogs,gpLb,gm:gpLb/sp,rev:spLbs*sp,gpDol:spLbs*gpLb,compDelta:sp-s.comp};
-  }),[prices,lbs,farmBase,phase,freight,shrink]);
+    const compP=compAvg[s.id]||s.comp;
+    return{...s,fa,pc,spLbs,cogs,gpLb,gm:gpLb/sp,rev:spLbs*sp,gpDol:spLbs*gpLb,compDelta:sp-compP,compP};
+  }),[prices,lbs,farmBase,phase,freight,shrink,compAvg]);
 
   const totRev=skuRows.reduce((s,c)=>s+c.rev,0);
   const totGP=skuRows.reduce((s,c)=>s+c.gpDol,0);
@@ -308,102 +355,87 @@ export default function App(){
 
   const maxWS=(menuP,portOz,loss,fcPct)=>(menuP*fcPct)/((portOz/(1-loss))/16);
 
+  // brighten dark accent colors in dark mode
+  const dc=(c)=>{
+    if(!dark) return c;
+    const map={"#0369a1":"#38bdf8","#c2410c":"#fb923c","#ea580c":"#fb923c","#ef4444":"#f87171","#dc2626":"#f87171","#15803d":"#4ade80","#16a34a":"#4ade80","#92400e":"#fbbf24","#9333ea":"#c084fc","#2563eb":"#60a5fa","#d97706":"#fbbf24","#b45309":"#f59e0b"};
+    return map[c]||c;
+  };
+
   const S=(l,v,setV,min,max,step2,fmt2,c,tipKey)=>(
     <div key={l} style={{flex:1,minWidth:130,padding:"2px 4px"}}>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-        <span {...(tipKey?T(tipKey):{})} style={{fontSize:9,color:"#475569",fontFamily:"monospace",textTransform:"uppercase",
-          borderBottom:tipKey?"1px dashed #374151":"none",cursor:tipKey?"help":"default"}}>{l}</span>
-        <span style={{fontSize:11,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{fmt2(v)}</span>
+        <span {...(tipKey?T(tipKey):{})} style={{fontSize:10,color:"var(--text-sec)",textTransform:"uppercase",
+          borderBottom:tipKey?"1px dashed var(--border-dashed)":"none",cursor:tipKey?"help":"default"}}>{l}</span>
+        <span style={{fontSize:11,fontWeight:"bold",color:dc(c)}}>{fmt2(v)}</span>
       </div>
       <input type="range" min={min} max={max} step={step2} value={v}
-        onChange={e=>setV(parseFloat(e.target.value))} style={{width:"100%",accentColor:c,height:6}}/>
+        onChange={e=>setV(parseFloat(e.target.value))} style={{width:"100%",accentColor:dc(c),height:6}}/>
     </div>
   );
 
   const KPI=({label,val,sub,color,border,tipKey,badge})=>(
-    <div {...T(tipKey)} style={{background:"#0c1628",border:`1px solid ${border||"#1e293b"}`,borderRadius:7,padding:"10px 12px"}}>
+    <div {...T(tipKey)} style={{background:"var(--bg-card)",border:`1px solid ${border||"var(--border)"}`,borderRadius:7,padding:"10px 12px"}}>
       <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4,flexWrap:"wrap"}}>
-        <span style={{fontSize:9,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em",borderBottom:"1px dashed #374151"}}>{label}</span>
+        <span style={{fontSize:10,color:"var(--text-sec)",textTransform:"uppercase",letterSpacing:"0.05em",borderBottom:"1px dashed var(--border-dashed)"}}>{label}</span>
         {badge==="M"&&<MLABEL/>}{badge==="Y"&&<YLABEL/>}
       </div>
-      <div style={{fontSize:18,fontWeight:"bold",color,fontFamily:"monospace"}}>{val}</div>
-      {sub&&<div style={{fontSize:9,color:"#475569",marginTop:3}}>{sub}</div>}
+      <div style={{fontSize:18,fontWeight:"bold",color}}>{val}</div>
+      {sub&&<div style={{fontSize:10,color:"var(--text-sec)",marginTop:3}}>{sub}</div>}
     </div>
   );
 
   return(
-    <div style={{background:"#070d18",minHeight:"100vh",color:"#e2e8f0",fontFamily:"Georgia,serif",position:"relative"}}>
+    <div style={{background:"var(--bg)",minHeight:"100vh",color:"var(--text)",fontFamily:"'Inter',sans-serif",fontVariantNumeric:"tabular-nums",position:"relative"}}>
 
       {/* FLOATING TOOLTIP */}
       {tipsOn&&tip.show&&tip.text&&(
-        <div style={{position:"fixed",left:Math.min(tip.x+12,window.innerWidth-250),top:Math.max(tip.y-6,8),
-          zIndex:99999,background:"#0f172a",color:"#e2e8f0",border:"1px solid #334155",
-          borderRadius:7,padding:"7px 10px",maxWidth:240,fontSize:10,lineHeight:1.55,
-          boxShadow:"0 6px 20px #000b",pointerEvents:"none",fontFamily:"monospace",whiteSpace:"pre-line",
+        <div className="floating-tip" style={{left:Math.min(tip.x+12,window.innerWidth-260),top:Math.max(tip.y-6,8),
           transition:"opacity 0.15s ease",opacity:tip.show?1:0}}>
           {tip.text.split("\n").map((line,i)=>(
-            <div key={i} style={{color:i===0?"#fbbf24":"#64748b",fontWeight:i===0?"bold":"normal",marginBottom:i===0?3:0,fontSize:i===0?10:9}}>{line}</div>
+            <div key={i} style={{color:i===0?"#fbbf24":"#94a3b8",fontWeight:i===0?"bold":"normal",marginBottom:i===0?4:0,fontSize:i===0?11:9}}>{line}</div>
           ))}
         </div>
       )}
 
       {/* MOBILE NOTICE */}
-      <div className="mobile-notice" style={{display:"none",background:"#f59e0b",color:"#000",padding:"12px 22px",textAlign:"center",fontSize:12,fontFamily:"monospace",fontWeight:"bold"}}>
+      <div className="mobile-notice" style={{display:"none",background:"#fef3c7",color:"#92400e",padding:"12px 22px",textAlign:"center",fontSize:12,fontWeight:"bold",borderBottom:"1px solid #fbbf24"}}>
         Best viewed on desktop — rotate your device or open on a computer for the full experience.
       </div>
 
       {/* HEADER */}
-      <div style={{background:"#0c1628",borderBottom:"1px solid #1e293b",padding:"10px 22px"}}>
-        <div style={{maxWidth:1300,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:2}}>
-              <div style={{width:28,height:28,borderRadius:6,background:"linear-gradient(135deg,#f59e0b,#d97706)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:"bold",color:"#000",fontFamily:"Georgia,serif",flexShrink:0}}>J</div>
-              <div>
-                <div style={{fontSize:9,color:"#475569",letterSpacing:"0.18em",textTransform:"uppercase",fontFamily:"monospace"}}>
-                  Joseph Meat Company · Financial Model v10
-                </div>
-                <div style={{fontSize:15,fontWeight:"bold",color:"#f1f5f9",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                  JMC Full Model
-                  {investorMode&&<span style={{fontSize:9,padding:"2px 8px",borderRadius:4,background:"#f59e0b22",color:"#f59e0b",border:"1px solid #f59e0b44",fontFamily:"monospace"}}>INVESTOR VIEW</span>}
-                  {!investorMode&&tipsOn&&<span style={{fontSize:10,color:"#4ade80",fontStyle:"italic",fontWeight:"normal"}}>
-                    Hover <span style={{borderBottom:"1px dashed #4ade80"}}>dashed labels</span> for explanations · <MLABEL/> = monthly · <YLABEL/> = annual
-                  </span>}
-                </div>
+      <div className="border-b px-6 py-3" style={{background:"var(--bg-card)",borderColor:"var(--border)"}}>
+        <div className="max-w-[1300px] mx-auto flex justify-between items-center flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center text-base font-bold text-black shrink-0 shadow-lg shadow-brand-500/20" style={{fontFamily:"Georgia,serif"}}>J</div>
+            <div>
+              <div className="text-[9px] text-slate-500 dark:text-slate-400 tracking-[0.18em] uppercase font-mono">
+                {companyName} · Financial Model v10
+              </div>
+              <div className="text-base font-bold flex items-center gap-3 flex-wrap" style={{color:"var(--text)"}}>
+                JMC Full Model
+                {investorMode&&<span className="badge bg-brand-400/10 text-brand-400 border border-brand-400/20">INVESTOR VIEW</span>}
+                {!investorMode&&tipsOn&&<span className="text-[10px] text-emerald-400 italic font-normal">
+                  Hover <span className="border-b border-dashed border-emerald-400">dashed labels</span> for explanations · <MLABEL/> = monthly · <YLABEL/> = annual
+                </span>}
               </div>
             </div>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            {/* PDF Export */}
-            <button onClick={()=>window.print()} style={{
-              padding:"7px 14px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,
-              border:"2px solid #374151",background:"#0c1628",color:"#94a3b8",
-              display:"flex",alignItems:"center",gap:6,
-            }}>
+          <div className="flex gap-2 items-center flex-wrap">
+            <button onClick={()=>setDark(d=>!d)} className="btn-ghost flex items-center gap-1.5" title={dark?"Switch to light mode":"Switch to dark mode"}>
+              {dark?"☀ Light":"◑ Dark"}
+            </button>
+            <button onClick={()=>window.print()} className="btn-ghost flex items-center gap-1.5">
               Export PDF
             </button>
-            {/* Investor Link Copy */}
-            {!investorMode&&<button onClick={()=>{navigator.clipboard.writeText(window.location.origin+"?view=investor");alert("Investor link copied to clipboard!");}} style={{
-              padding:"7px 14px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,
-              border:"2px solid #6d28d9",background:"#6d28d922",color:"#a78bfa",
-              display:"flex",alignItems:"center",gap:6,
-            }}>
+            {!investorMode&&<button onClick={()=>{navigator.clipboard.writeText(window.location.origin+"?view=investor");alert("Investor link copied to clipboard!");}} className="btn flex items-center gap-1.5 bg-violet-500/10 text-violet-400 border-violet-600 hover:bg-violet-500/20">
               Copy Investor Link
             </button>}
-            {/* Tooltip toggle */}
-            {!investorMode&&<button onClick={()=>{setTipsOn(v=>!v);setTip(t=>({...t,show:false}));}} style={{
-              padding:"7px 14px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,
-              border:`2px solid ${tipsOn?"#4ade80":"#374151"}`,
-              background:tipsOn?"#14532d":"#0c1628",
-              color:tipsOn?"#4ade80":"#475569",
-              display:"flex",alignItems:"center",gap:6,
-            }}>
+            {!investorMode&&<button onClick={()=>{setTipsOn(v=>!v);setTip(t=>({...t,show:false}));}} className={tipsOn?"btn-success flex items-center gap-1.5":"btn-ghost flex items-center gap-1.5"}>
               {tipsOn?"Hints ON":"Hints OFF"}
             </button>}
             {!investorMode&&["3P","Own"].map(p=>(
-              <button key={p} onClick={()=>setPhase(p)} style={{padding:"8px 18px",borderRadius:6,cursor:"pointer",
-                fontFamily:"monospace",fontSize:12,fontWeight:"bold",
-                border:`2px solid ${phase===p?"#f59e0b":"#1e293b"}`,
-                background:phase===p?"#f59e0b18":"#0c1628",color:phase===p?"#f59e0b":"#64748b"}}>
+              <button key={p} onClick={()=>setPhase(p)} className={phase===p?"phase-active border-brand-500 bg-brand-500/10 text-brand-400 shadow-brand-500/10":"phase-btn border-surface-border bg-surface-raised text-slate-500 dark:text-slate-400 hover:text-stone-700 dark:text-slate-200 hover:border-surface-border-light"}>
                 {p==="3P"?"Phase 1 · 3rd-Party":"Phase 2 · Owned Plant"}
               </button>
             ))}
@@ -412,76 +444,76 @@ export default function App(){
       </div>
 
       {/* RETAIL SLIDERS */}
-      <div style={{background:"#0c1628",borderBottom:"1px solid #1a2740",padding:"10px 22px",display:investorMode?"none":undefined}}>
+      <div style={{background:"var(--bg-card)",borderBottom:"1px solid var(--border-light)",padding:"10px 22px",display:investorMode?"none":undefined}}>
         <div style={{maxWidth:1300,margin:"0 auto",display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-end"}}>
-          {S("Retail Lbs/Month",lbs,setLbs,500,12000,250,v=>v.toLocaleString()+"lb","#c084fc","retailRevMo")}
-          {S("Trip Cost $",tripCost,setTripCost,1000,5000,200,v=>"$"+v.toLocaleString(),"#0ea5e9","trans")}
-          {S("Trips/Month",trips,setTrips,1,4,1,v=>v+"×","#0ea5e9","trans")}
-          {S("Shrink %",shrink,setShrink,0.03,0.15,0.01,v=>Math.round(v*100)+"%","#f97316","cogs")}
+          {S("Retail Lbs/Month",lbs,setLbs,500,12000,250,v=>v.toLocaleString()+"lb","#9333ea","retailRevMo")}
+          {S("Trip Cost $",tripCost,setTripCost,1000,5000,200,v=>"$"+v.toLocaleString(),"#0369a1","trans")}
+          {S("Trips/Month",trips,setTrips,1,4,1,v=>v+"×","#0369a1","trans")}
+          {S("Shrink %",shrink,setShrink,0.03,0.15,0.01,v=>Math.round(v*100)+"%","#c2410c","cogs")}
           {S("Farm Base/lb",farmBase,setFarmBase,4.5,9.0,0.10,v=>"$"+fmt(v),"#ef4444","farm")}
-          {S("LA Fixed/Month $",fixed,setFixed,15000,40000,1000,v=>"$"+v.toLocaleString(),"#f87171","jmcNetMo")}
-          <div {...T("trans")} style={{background:"#070d18",borderRadius:5,padding:"5px 10px",fontSize:10,fontFamily:"monospace",color:"#64748b",border:"1px solid #1e293b",flexShrink:0}}>
-            <div>Freight: <b style={{color:"#0ea5e9"}}>${fmt(freight)}/lb</b></div>
-            <div style={{fontSize:9}}>${(tripCost*trips).toLocaleString()}/mo ÷ {lbs.toLocaleString()}lb</div>
+          {S("LA Fixed/Month $",fixed,setFixed,15000,40000,1000,v=>"$"+v.toLocaleString(),"#dc2626","jmcNetMo")}
+          <div {...T("trans")} style={{background:"var(--bg)",borderRadius:5,padding:"5px 10px",fontSize:10,color:"var(--text-muted)",border:"1px solid var(--border)",flexShrink:0}}>
+            <div>Freight: <b style={{color:dc("#0369a1")}}>${fmt(freight)}/lb</b></div>
+            <div style={{fontSize:10}}>${(tripCost*trips).toLocaleString()}/mo ÷ {lbs.toLocaleString()}lb</div>
           </div>
         </div>
       </div>
 
       {/* HUB CONTROLS */}
       {!investorMode&&phase==="Own"&&(
-        <div style={{background:"#071a0f",borderBottom:"1px solid #166534",padding:"12px 22px"}}>
+        <div style={{background:dark?"var(--bg-surface)":"#f0fdf4",borderBottom:`1px solid ${dark?"var(--border)":"#86efac"}`,padding:"12px 22px"}}>
           <div style={{maxWidth:1300,margin:"0 auto"}}>
-            <div style={{fontSize:10,color:"#22c55e",fontFamily:"monospace",fontWeight:"bold",marginBottom:10}}>⚙ PHASE 2 — OWNED PROCESSING HUB CONTROLS
-              <span {...T("hubFixed")} style={{fontSize:10,color:"#4ade80",marginLeft:10,borderBottom:"1px dashed #166534",cursor:"help"}}>Fixed costs = locations you OWN, not heads processed</span>
+            <div style={{fontSize:10,color:dc("#15803d"),fontWeight:"bold",marginBottom:10}}>⚙ PHASE 2 — OWNED PROCESSING HUB CONTROLS
+              <span {...T("hubFixed")} style={{fontSize:10,color:dc("#16a34a"),marginLeft:10,borderBottom:`1px dashed ${dark?"var(--border-dashed)":"#86efac"}`,cursor:"help"}}>Fixed costs = locations you OWN, not heads processed</span>
             </div>
             <div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-end"}}>
 
               {/* Locations — prominent */}
-              <div style={{background:"#0c2a1a",border:"2px solid #22c55e",borderRadius:10,padding:"12px 16px",minWidth:155,flexShrink:0}}>
-                <div {...T("hubFixed")} style={{fontSize:9,color:"#22c55e",fontFamily:"monospace",textTransform:"uppercase",marginBottom:4,borderBottom:"1px dashed #166534",cursor:"help"}}>Owned Locations</div>
-                <div style={{fontSize:32,fontWeight:"bold",color:"#4ade80",fontFamily:"monospace",textAlign:"center"}}>{numLoc}</div>
+              <div style={{background:dark?"var(--bg-card)":"#ffffff",border:`2px solid ${dc("#15803d")}`,borderRadius:10,padding:"12px 16px",minWidth:155,flexShrink:0}}>
+                <div {...T("hubFixed")} style={{fontSize:10,color:dc("#15803d"),textTransform:"uppercase",marginBottom:4,borderBottom:`1px dashed ${dark?"var(--border-dashed)":"#86efac"}`,cursor:"help"}}>Owned Locations</div>
+                <div style={{fontSize:32,fontWeight:"bold",color:dc("#16a34a"),textAlign:"center"}}>{numLoc}</div>
                 <input type="range" min={1} max={20} step={1} value={numLoc}
                   onChange={e=>{const v=parseInt(e.target.value);setNumLoc(v);if(extH>v*capPerPlant)setExtH(v*capPerPlant);}}
-                  style={{width:"100%",accentColor:"#22c55e",marginTop:6}}/>
-                <div style={{marginTop:6,fontSize:9,fontFamily:"monospace",color:"#64748b",lineHeight:1.8}}>
-                  <div>Capacity: <b style={{color:"#4ade80"}}>{hub.cap} hd/mo</b></div>
-                  <div>Fixed: <b style={{color:"#f87171"}}>${(numLoc*fixedPerPlant).toLocaleString()}/mo</b></div>
+                  style={{width:"100%",accentColor:"#15803d",marginTop:6}}/>
+                <div style={{marginTop:6,fontSize:10,color:"var(--text-muted)",lineHeight:1.8}}>
+                  <div>Capacity: <b style={{color:dc("#16a34a")}}>{hub.cap} hd/mo</b></div>
+                  <div>Fixed: <b style={{color:dc("#dc2626")}}>${(numLoc*fixedPerPlant).toLocaleString()}/mo</b></div>
                 </div>
               </div>
 
-              {S("Cap/Plant (hd)",capPerPlant,setCapPerPlant,10,300,5,v=>v+" hd","#a855f7","hubBE")}
-              {S("Fixed/Plant/Mo",fixedPerPlant,setFixedPerPlant,8000,50000,1000,v=>"$"+v.toLocaleString(),"#a855f7","hubFixed")}
+              {S("Cap/Plant (hd)",capPerPlant,setCapPerPlant,10,300,5,v=>v+" hd","#7c3aed","hubBE")}
+              {S("Fixed/Plant/Mo",fixedPerPlant,setFixedPerPlant,8000,50000,1000,v=>"$"+v.toLocaleString(),"#7c3aed","hubFixed")}
 
-              <div style={{minWidth:130,flex:1}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                  <span {...T("netPerHead")} style={{fontSize:9,color:"#4ade80",fontFamily:"monospace",textTransform:"uppercase",borderBottom:"1px dashed #166534",cursor:"help"}}>Ext Heads/Mo</span>
-                  <span style={{fontSize:11,fontWeight:"bold",color:"#4ade80",fontFamily:"monospace"}}>{hub.h} / {hub.cap}</span>
+              <div style={{flex:1,minWidth:130,padding:"2px 4px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                  <span {...T("netPerHead")} style={{fontSize:10,color:"var(--text-sec)",textTransform:"uppercase",borderBottom:"1px dashed var(--border-dashed)",cursor:"help"}}>Ext Heads/Mo</span>
+                  <span style={{fontSize:11,fontWeight:"bold",color:dc("#16a34a")}}>{hub.h} / {hub.cap}</span>
                 </div>
                 <input type="range" min={0} max={Math.max(hub.cap,1)} step={1} value={extH}
-                  onChange={e=>setExtH(parseInt(e.target.value))} style={{width:"100%",accentColor:"#4ade80"}}/>
-                <div style={{height:5,background:"#1e293b",borderRadius:3,overflow:"hidden",marginTop:3}}>
-                  <div style={{height:"100%",width:`${hub.util*100}%`,background:hub.util>0.7?"#4ade80":"#f59e0b",borderRadius:3}}/>
+                  onChange={e=>setExtH(parseInt(e.target.value))} style={{width:"100%",accentColor:dc("#16a34a"),height:6}}/>
+                <div style={{height:4,background:"var(--border)",borderRadius:3,overflow:"hidden",marginTop:3}}>
+                  <div style={{height:"100%",width:`${hub.util*100}%`,background:hub.util>0.7?dc("#16a34a"):dc("#b45309"),borderRadius:3}}/>
                 </div>
-                <div {...T("hubBE")} style={{fontSize:9,color:"#475569",fontFamily:"monospace",marginTop:2,cursor:"help"}}>{Math.round(hub.util*100)}% utilization · BE: {Math.ceil(hub.be)} heads</div>
+                <div {...T("hubBE")} style={{fontSize:10,color:"var(--text-sec)",marginTop:2,cursor:"help",whiteSpace:"nowrap"}}>{Math.round(hub.util*100)}% util · BE: {Math.ceil(hub.be)} hd</div>
               </div>
 
-              {S("Rate $/lb retail",rLb,setRLb,0.5,3.0,0.05,v=>"$"+fmt(v),"#fbbf24","netPerHead")}
-              {S("Rate $/head",rHead,setRHead,50,600,10,v=>"$"+v,"#fbbf24","netPerHead")}
+              {S("Rate $/lb retail",rLb,setRLb,0.5,3.0,0.05,v=>"$"+fmt(v),"#d97706","netPerHead")}
+              {S("Rate $/head",rHead,setRHead,50,600,10,v=>"$"+v,"#d97706","netPerHead")}
               {S("Retail Lbs/Head",lbPerHead,setLbPerHead,300,700,5,v=>v+"lb","#34d399","netPerHead")}
-              {S("Var Cost/Head",varCPH,setVarCPH,20,200,2.5,v=>"$"+fmt(v),"#f97316","netPerHead")}
+              {S("Var Cost/Head",varCPH,setVarCPH,20,200,2.5,v=>"$"+fmt(v),"#c2410c","netPerHead")}
 
               {/* Hub snapshot */}
-              <div style={{background:"#0c1628",border:"1px solid #166534",borderRadius:8,padding:"8px 12px",minWidth:165,flexShrink:0}}>
-                <div style={{fontSize:9,color:"#4ade80",fontFamily:"monospace",marginBottom:5}}>HUB P&L — MONTHLY</div>
+              <div style={{background:"var(--bg-card)",border:`1px solid ${dark?"var(--border)":"#86efac"}`,borderRadius:8,padding:"8px 12px",minWidth:165,flexShrink:0}}>
+                <div style={{fontSize:10,color:dc("#16a34a"),marginBottom:5}}>HUB P&L — MONTHLY</div>
                 {[
-                  ["Gross ext rev",money(hub.gross),"#4ade80","MONTHLY GROSS EXTERNAL REVENUE\nHeads × ($1.00/lb × 491 lbs + $200) per head"],
-                  ["Variable cost","-"+money(hub.varC),"#f87171","Monthly variable cost to process external heads"],
-                  ["Plant fixed","-"+money(hub.fixed),"#f87171","hubFixed"],
-                  ["Hub net / mo",money(hub.net),hub.net>=0?"#22c55e":"#f87171","hubNetMo"],
+                  ["Gross ext rev",money(hub.gross),dc("#16a34a"),"MONTHLY GROSS EXTERNAL REVENUE\nHeads × ($1.00/lb × 491 lbs + $200) per head"],
+                  ["Variable cost","-"+money(hub.varC),dc("#dc2626"),"Monthly variable cost to process external heads"],
+                  ["Plant fixed","-"+money(hub.fixed),dc("#dc2626"),"hubFixed"],
+                  ["Hub net / mo",money(hub.net),hub.net>=0?dc("#15803d"):dc("#dc2626"),"hubNetMo"],
                 ].map(([k,v,c,tipK])=>(
-                  <div key={k} {...T(tipK)} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid #1a2740"}}>
-                    <span style={{fontSize:9,color:"#475569",fontFamily:"monospace",borderBottom:"1px dashed #374151"}}>{k}</span>
-                    <span style={{fontSize:10,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{v}</span>
+                  <div key={k} {...T(tipK)} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid var(--border-light)"}}>
+                    <span style={{fontSize:10,color:"var(--text-sec)",borderBottom:"1px dashed var(--border-dashed)"}}>{k}</span>
+                    <span style={{fontSize:10,fontWeight:"bold",color:c}}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -491,31 +523,44 @@ export default function App(){
       )}
 
       {/* KPI BAR */}
-      <div style={{background:"#0a1020",borderBottom:"1px solid #1a2740",padding:"10px 22px"}}>
-        <div style={{maxWidth:1300,margin:"0 auto",display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:8}}>
-          <KPI label="Revenue" badge="M" val={money(totRev)} sub={"$"+fmt(blendP)+"/lb · "+lbs.toLocaleString()+"lb"} color="#4ade80" tipKey="retailRevMo"/>
-          <KPI label="Gross Profit" badge="M" val={money(totGP)} sub={fmt(blendGM*100,1)+"% GM — before fixed costs"} color="#60a5fa" tipKey="grossProfitMo"/>
-          <KPI label="JMC Net Profit" badge="M" val={money(jmcNP)} sub="After $22K fixed + 2% fees" color={jmcNP>=0?"#4ade80":"#f87171"} border={jmcNP>=0?"#166534":"#7f1d1d"} tipKey="jmcNetMo"/>
-          {phase==="Own"?<KPI label="Hub Net" badge="M" val={money(hub.net)} sub={hub.h+" ext heads · "+Math.round(hub.util*100)+"% util"} color={hub.net>=0?"#22c55e":"#f87171"} border={hub.net>=0?"#166534":"#7f1d1d"} tipKey="hubNetMo"/>
-            :<KPI label="Net Profit" badge="Y" val={money(jmcNP*12)} sub="Monthly × 12" color={jmcNP>=0?"#c084fc":"#f87171"} tipKey="annualTotal"/>}
-          <KPI label="Combined Net" badge="M" val={money(combinedNP)} sub={phase==="Own"?"Retail + Hub":"Retail only"} color={combinedNP>=0?"#4ade80":"#f87171"} border={combinedNP>=0?"#166534":"#7f1d1d"} tipKey="combinedNPMo"/>
-          <KPI label="Wholesale GP" badge="M"
-            val={wsOn?money(wsTotGP):"OFF"}
-            sub={wsOn?"$"+fmt(wsBlendP)+"/lb · "+wsLbs.toLocaleString()+"lb":"Enable in ⑤ Wholesale tab"}
-            color={wsOn?"#fbbf24":"#374151"} border={wsOn?"#92400e":"#1e293b"} tipKey="wsGPMo"/>
-          <KPI label="All Channels" badge="M" val={money(totalMo)} sub={wsOn?"Retail NP + WS GP + Hub":"Retail NP + Hub (WS off)"} color={totalMo>=0?"#4ade80":"#f87171"} border={totalMo>=0?"#166534":"#7f1d1d"} tipKey="totalMo"/>
-          <KPI label="All Channels" badge="Y" val={money(totalMo*12)} sub="Monthly × 12, current run rate" color={totalMo>=0?"#c084fc":"#f87171"} tipKey="annualTotal"/>
+      <div className="border-b px-6 py-3" style={{background:"var(--bg-alt)",borderColor:"var(--border-light)"}}>
+        <div className="max-w-[1300px] mx-auto">
+          {/* Monthly */}
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+            <MLABEL/>
+            <span style={{fontSize:9,color:"var(--text-label)",letterSpacing:"0.1em",textTransform:"uppercase"}}>Monthly</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2 mb-3">
+            <KPI label="Revenue" val={money(totRev)} sub={"$"+fmt(blendP)+"/lb · "+lbs.toLocaleString()+"lb"} color={dc("#16a34a")} tipKey="retailRevMo"/>
+            <KPI label="Gross Profit" val={money(totGP)} sub={fmt(blendGM*100,1)+"% GM — before fixed costs"} color={dc("#2563eb")} tipKey="grossProfitMo"/>
+            <KPI label="JMC Net Profit" val={money(jmcNP)} sub="After $22K fixed + 2% fees" color={jmcNP>=0?dc("#16a34a"):dc("#dc2626")} border={jmcNP>=0?"#86efac":"#fca5a5"} tipKey="jmcNetMo"/>
+            {phase==="Own"&&<KPI label="Hub Net" val={money(hub.net)} sub={hub.h+" ext heads · "+Math.round(hub.util*100)+"% util"} color={hub.net>=0?dc("#15803d"):dc("#dc2626")} border={hub.net>=0?"#86efac":"#fca5a5"} tipKey="hubNetMo"/>}
+            <KPI label="Wholesale GP"
+              val={wsOn?money(wsTotGP):"OFF"}
+              sub={wsOn?"$"+fmt(wsBlendP)+"/lb · "+wsLbs.toLocaleString()+"lb":"Enable in ⑤ Wholesale tab"}
+              color={wsOn?dc("#d97706"):"var(--text-label)"} border={wsOn?"#fbbf24":"var(--border)"} tipKey="wsGPMo"/>
+            <KPI label="Total All Channels" val={money(totalMo)} sub={wsOn?"Retail NP + WS GP + Hub":"Retail NP + Hub (WS off)"} color={totalMo>=0?dc("#16a34a"):dc("#dc2626")} border={totalMo>=0?"#86efac":"#fca5a5"} tipKey="totalMo"/>
+          </div>
+          {/* Annual */}
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+            <YLABEL/>
+            <span style={{fontSize:9,color:"var(--text-label)",letterSpacing:"0.1em",textTransform:"uppercase"}}>Annual (projected)</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            <KPI label="Revenue" val={money(totRev*12)} sub={lbs.toLocaleString()+"lb/mo × 12"} color={dc("#16a34a")} tipKey="annualTotal"/>
+            <KPI label="Gross Profit" val={money(totGP*12)} sub={fmt(blendGM*100,1)+"% GM"} color={dc("#2563eb")} tipKey="annualTotal"/>
+            <KPI label="JMC Net Profit" val={money(jmcNP*12)} sub="After all fixed costs" color={jmcNP>=0?dc("#9333ea"):dc("#dc2626")} tipKey="annualTotal"/>
+            <KPI label="Wholesale GP" val={wsOn?money(wsTotGP*12):"OFF"} sub={wsOn?"Annual WS channel":"Not active"} color={wsOn?dc("#d97706"):"var(--text-label)"} tipKey="annualTotal"/>
+            <KPI label="Total All Channels" val={money(totalMo*12)} sub="Current run rate × 12" color={totalMo>=0?dc("#9333ea"):dc("#dc2626")} border={totalMo>=0?"#c4b5fd":"#fca5a5"} tipKey="annualTotal"/>
+          </div>
         </div>
       </div>
 
       {/* TABS */}
-      <div style={{background:"#0c1628",borderBottom:"1px solid #1e293b"}}>
-        <div style={{maxWidth:1300,margin:"0 auto",display:"flex"}}>
+      <div className="border-b" style={{background:"var(--bg-card)",borderColor:"var(--border)"}}>
+        <div className="max-w-[1300px] mx-auto flex gap-1 px-4 py-2">
           {TABS.map((t,i)=>(
-            <button key={i} onClick={()=>setTab(i)} style={{padding:"9px 16px",border:"none",cursor:"pointer",
-              fontFamily:"monospace",fontSize:11,whiteSpace:"nowrap",
-              borderBottom:`2px solid ${tab===i?"#f59e0b":"transparent"}`,
-              background:"transparent",color:tab===i?"#f59e0b":"#64748b"}}>{t}</button>
+            <button key={i} onClick={()=>setTab(i)} className={tab===i?"tab-active":"tab"}>{t}</button>
           ))}
         </div>
       </div>
@@ -526,129 +571,186 @@ export default function App(){
         {tab===0&&(
           <div>
             {/* Hero Section */}
-            <div style={{background:"linear-gradient(135deg, #0c1628 0%, #1a1040 100%)",border:"1px solid #1e293b",borderRadius:12,padding:"32px 36px",marginBottom:16,position:"relative",overflow:"hidden"}}>
-              <div style={{position:"absolute",top:0,right:0,width:200,height:200,background:"radial-gradient(circle, #f59e0b11 0%, transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{fontSize:9,color:"#f59e0b",letterSpacing:"0.2em",textTransform:"uppercase",fontFamily:"monospace",marginBottom:6}}>Investor Overview</div>
-              <div style={{fontSize:24,fontWeight:"bold",color:"#f1f5f9",marginBottom:4}}>Joseph Meat Company</div>
-              <div style={{fontSize:13,color:"#94a3b8",maxWidth:700,lineHeight:1.6}}>
-                Vertically-integrated beef operation — Nebraska-sourced, LA-retail. Premium whole-animal butcher shop with wholesale channel and owned processing hub expansion path.
+            <div className="relative overflow-hidden rounded-2xl mb-4" style={{background:dark?"linear-gradient(135deg, #0f1624 0%, #1a2540 50%, #0f1624 100%)":"linear-gradient(135deg, #1a1207 0%, #3d2a0a 50%, #1a1207 100%)",border:"1px solid "+(dark?"#2a3555":"#5a4420")}}>
+              <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse at 70% 20%, "+(dark?"rgba(180,83,9,0.12)":"rgba(255,200,100,0.08)")+" 0%, transparent 60%)"}}/>
+              <div className="absolute inset-0 pointer-events-none" style={{background:"radial-gradient(ellipse at 20% 80%, "+(dark?"rgba(147,51,234,0.08)":"rgba(180,140,60,0.06)")+" 0%, transparent 50%)"}}/>
+              <div className="relative px-10 py-10">
+                <div className="flex items-start justify-between gap-8">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-900/30">
+                        <Beef size={20} className="text-white"/>
+                      </div>
+                      <div className="h-px flex-1 max-w-[80px]" style={{background:dark?"linear-gradient(to right, #b45309, transparent)":"linear-gradient(to right, #c8962a, transparent)"}}/>
+                    </div>
+                    <input type="text" value={companyName} onChange={e=>setCompanyName(e.target.value)}
+                      className="text-3xl font-bold mb-3 font-sans w-full rounded px-1 -ml-1 transition-colors"
+                      style={{color:"#ffffff",background:"transparent",border:"none",outline:"none",letterSpacing:"-0.02em"}}/>
+                    <textarea value={companyDesc} onChange={e=>setCompanyDesc(e.target.value)} rows={2}
+                      className="text-sm max-w-2xl w-full leading-relaxed resize-none rounded px-1 -ml-1 transition-colors"
+                      style={{color:"rgba(255,255,255,0.6)",background:"transparent",border:"none",outline:"none"}}/>
+                    <div className="flex items-center gap-3 mt-5">
+                      {[
+                        phase==="3P"?"3rd-Party Processing":"Owned Processing",
+                        lbs.toLocaleString()+" lbs/mo",
+                        wsOn?"Wholesale Active":"Retail Only",
+                      ].map(tag=>(
+                        <span key={tag} style={{fontSize:9,padding:"3px 10px",borderRadius:20,border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.5)",letterSpacing:"0.05em"}}>{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="hidden lg:flex flex-col items-end gap-2 pt-2">
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",textTransform:"uppercase",letterSpacing:"0.15em"}}>Financial Model v10</div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Key Metrics Grid */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+            <div className="grid grid-cols-4 gap-3 mb-4">
               {[
-                {label:"Annual Revenue (Projected)",val:money(totRev*12),sub:lbs.toLocaleString()+" lbs/mo retail",color:"#4ade80",icon:"$"},
-                {label:"Annual Net Profit",val:money(totalMo*12),sub:(totalMo>=0?"Profitable":"Pre-profit")+" at current volume",color:totalMo>=0?"#c084fc":"#f87171",icon:"$"},
-                {label:"Gross Margin",val:fmt(blendGM*100,1)+"%",sub:"Blended across all SKUs",color:blendGM>=0.5?"#4ade80":"#f59e0b",icon:"%"},
-                {label:"Break-Even Volume",val:fmt(beVol,0)+" lbs/mo",sub:beVol<=lbs?"Above break-even":"Below — need "+fmt(beVol-lbs,0)+" more lbs",color:beVol<=lbs?"#4ade80":"#f87171",icon:"BE"},
+                {label:"Annual Revenue (Projected)",val:money(totRev*12),sub:lbs.toLocaleString()+" lbs/mo retail",color:"#16a34a",Icon:DollarSign,glow:"glow-green"},
+                {label:"Annual Net Profit",val:money(totalMo*12),sub:(totalMo>=0?"Profitable":"Pre-profit")+" at current volume",color:totalMo>=0?"#9333ea":"#dc2626",Icon:TrendingUp,glow:totalMo>=0?"glow-purple":""},
+                {label:"Gross Margin",val:fmt(blendGM*100,1)+"%",sub:"Blended across all SKUs",color:blendGM>=0.5?"#16a34a":"#b45309",Icon:Percent,glow:blendGM>=0.5?"glow-green":"glow-amber"},
+                {label:"Break-Even Volume",val:fmt(beVol,0)+" lbs/mo",sub:beVol<=lbs?"Above break-even":"Below — need "+fmt(beVol-lbs,0)+" more lbs",color:beVol<=lbs?"#16a34a":"#dc2626",Icon:Scale,glow:beVol<=lbs?"glow-green":""},
               ].map(k=>(
-                <div key={k.label} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 18px",position:"relative"}}>
-                  <div style={{position:"absolute",top:14,right:14,fontSize:20,color:"#1e293b",fontFamily:"monospace",fontWeight:"bold"}}>{k.icon}</div>
-                  <div style={{fontSize:9,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em",marginBottom:8}}>{k.label}</div>
-                  <div style={{fontSize:24,fontWeight:"bold",color:k.color,fontFamily:"monospace"}}>{k.val}</div>
-                  <div style={{fontSize:10,color:"#475569",marginTop:6}}>{k.sub}</div>
+                <div key={k.label} className={`kpi-card ${k.glow}`}>
+                  <k.Icon size={20} className="absolute top-4 right-4 opacity-15" style={{color:k.color}}/>
+                  <div className="text-[10px] text-stone-500 dark:text-slate-400 uppercase tracking-wider font-semibold mb-2">{k.label}</div>
+                  <div className="text-2xl font-bold" style={{color:k.color}}>{k.val}</div>
+                  <div className="text-[10px] text-slate-600 dark:text-slate-300 mt-2">{k.sub}</div>
                 </div>
               ))}
             </div>
 
             {/* Two Column: Unit Economics + Revenue Channels */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
+            <div className="grid grid-cols-2 gap-3.5 mb-4">
               {/* Unit Economics */}
-              <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 22px"}}>
-                <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:8}}>UNIT ECONOMICS (per lb)</div>
+              <div className="card p-5">
+                <div className="section-header">UNIT ECONOMICS (per lb)</div>
                 {[
-                  ["Blended Sell Price","$"+fmt(blendP),"#4ade80"],
-                  ["All-In COGS","$"+fmt(blendC),"#fb923c"],
-                  ["Gross Profit / lb","$"+fmt(totGP/lbs),"#60a5fa"],
-                  ["Processing ("+( phase==="3P"?"3rd-Party":"Owned")+")","$"+fmt(phase==="3P"?cogs3P-cogsOwn+SKUS.reduce((s,sk)=>s+sk.mix*sk.pO,0):SKUS.reduce((s,sk)=>s+sk.mix*sk.pO,0)),"#c084fc"],
-                  ["Freight / lb","$"+fmt(freight),"#0ea5e9"],
+                  ["Blended Sell Price","$"+fmt(blendP),"#16a34a"],
+                  ["All-In COGS","$"+fmt(blendC),"#ea580c"],
+                  ["Gross Profit / lb","$"+fmt(totGP/lbs),"#2563eb"],
+                  ["Processing ("+( phase==="3P"?"3rd-Party":"Owned")+")","$"+fmt(phase==="3P"?cogs3P-cogsOwn+SKUS.reduce((s,sk)=>s+sk.mix*sk.pO,0):SKUS.reduce((s,sk)=>s+sk.mix*sk.pO,0)),"#9333ea"],
+                  ["Freight / lb","$"+fmt(freight),"#0369a1"],
                 ].map(([k,v,c])=>(
-                  <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #1a2740"}}>
-                    <span style={{fontSize:11,color:"#94a3b8",fontFamily:"monospace"}}>{k}</span>
-                    <span style={{fontSize:12,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{v}</span>
+                  <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--border-light)"}}>
+                    <span style={{fontSize:11,color:"var(--text-sec)"}}>{k}</span>
+                    <span style={{fontSize:12,fontWeight:"bold",color:dc(c)}}>{v}</span>
                   </div>
                 ))}
               </div>
 
               {/* Revenue Channels */}
-              <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 22px"}}>
-                <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:8}}>REVENUE CHANNELS (Monthly)</div>
+              <div className="card p-5">
+                <div className="section-header">REVENUE CHANNELS (Monthly)</div>
                 {[
-                  ["Retail Shop ("+lbs.toLocaleString()+" lbs/mo)",money(jmcNP),jmcNP>=0?"#4ade80":"#f87171","Net after $"+fmt(fixed,0)+" fixed"],
-                  ["Wholesale "+(wsOn?"ACTIVE":"OFF"),wsOn?money(wsTotGP):"—",wsOn?"#fbbf24":"#374151",wsOn?wsLbs.toLocaleString()+" lbs/mo":"Not yet activated"],
-                  ["Processing Hub "+(phase==="Own"?"ACTIVE":"PLANNED"),phase==="Own"?money(hub.net):"—",phase==="Own"?(hub.net>=0?"#22c55e":"#f87171"):"#374151",phase==="Own"?hub.h+" heads/mo, "+Math.round(hub.util*100)+"% util":"Phase 2 — owned plant"],
-                  ["──────────","","#1e293b",""],
-                  ["TOTAL Monthly",money(totalMo),totalMo>=0?"#4ade80":"#f87171","All active channels"],
-                  ["TOTAL Annual",money(totalMo*12),totalMo>=0?"#c084fc":"#f87171","Projected run rate"],
-                ].map(([k,v,c,s])=>(
-                  <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:k.startsWith("──")?"none":"1px solid #1a2740"}}>
-                    <div>
-                      <span style={{fontSize:11,color:k.startsWith("TOTAL")?"#e2e8f0":"#94a3b8",fontFamily:"monospace",fontWeight:k.startsWith("TOTAL")?"bold":"normal"}}>{k}</span>
-                      {s&&<div style={{fontSize:9,color:"#374151"}}>{s}</div>}
+                  {k:"Retail Shop ("+lbs.toLocaleString()+" lbs/mo)",v:money(jmcNP),c:jmcNP>=0?"#16a34a":"#dc2626",s:"Net after $"+fmt(fixed,0)+" fixed",Icon:Store},
+                  {k:"Wholesale "+(wsOn?"ACTIVE":"OFF"),v:wsOn?money(wsTotGP):"—",c:wsOn?"#d97706":"var(--text-label)",s:wsOn?wsLbs.toLocaleString()+" lbs/mo":"Not yet activated",Icon:Truck},
+                  {k:"Processing Hub "+(phase==="Own"?"ACTIVE":"PLANNED"),v:phase==="Own"?money(hub.net):"—",c:phase==="Own"?(hub.net>=0?"#15803d":"#dc2626"):"var(--text-label)",s:phase==="Own"?hub.h+" heads/mo, "+Math.round(hub.util*100)+"% util":"Phase 2 — owned plant",Icon:Factory},
+                  {k:"div",v:"",c:"",s:""},
+                  {k:"TOTAL Monthly",v:money(totalMo),c:totalMo>=0?"#16a34a":"#dc2626",s:"All active channels",Icon:DollarSign},
+                  {k:"TOTAL Annual",v:money(totalMo*12),c:totalMo>=0?"#9333ea":"#dc2626",s:"Projected run rate",Icon:TrendingUp},
+                ].map((row)=>row.k==="div"?(
+                  <div key="div" style={{borderBottom:"1px solid var(--border)",margin:"4px 0"}}/>
+                ):(
+                  <div key={row.k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:"1px solid var(--border-light)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {row.Icon&&<row.Icon size={14} style={{color:row.c,opacity:0.6,flexShrink:0}}/>}
+                      <div>
+                        <span style={{fontSize:11,color:row.k.startsWith("TOTAL")?"var(--text)":"var(--text-sec)",fontWeight:row.k.startsWith("TOTAL")?"bold":"normal"}}>{row.k}</span>
+                        {row.s&&<div style={{fontSize:10,color:"var(--text-label)"}}>{row.s}</div>}
+                      </div>
                     </div>
-                    <span style={{fontSize:k.startsWith("TOTAL")?14:12,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{v}</span>
+                    <span style={{fontSize:row.k.startsWith("TOTAL")?14:12,fontWeight:"bold",color:row.c}}>{row.v}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Phase Comparison */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 22px",marginBottom:16}}>
-              <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:8}}>PHASE COMPARISON — Processing Cost Impact</div>
+            <div className="card p-5 mb-4">
+              <div className="section-header">PHASE COMPARISON — Processing Cost Impact</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
                 {[
-                  {label:"Phase 1: 3rd-Party",desc:"Midwest Meat Co., Minden NE",cogsVal:cogs3P,color:"#f59e0b"},
-                  {label:"Phase 2: Owned Plant",desc:"MBMC plant, labor only",cogsVal:cogsOwn,color:"#22c55e"},
-                  {label:"Savings per lb",desc:"Processing cost reduction",cogsVal:cogs3P-cogsOwn,color:"#c084fc"},
+                  {label:"Phase 1: 3rd-Party",desc:"Midwest Meat Co., Minden NE",cogsVal:cogs3P,color:"#b45309"},
+                  {label:"Phase 2: Owned Plant",desc:"MBMC plant, labor only",cogsVal:cogsOwn,color:"#15803d"},
+                  {label:"Savings per lb",desc:"Processing cost reduction",cogsVal:cogs3P-cogsOwn,color:"#9333ea"},
                 ].map(p=>{
                   const annualSavings=p.label.includes("Savings")?(cogs3P-cogsOwn)*lbs*12:null;
                   return(
-                    <div key={p.label} style={{background:"#070d18",borderRadius:8,padding:"16px",border:"1px solid #1e293b"}}>
-                      <div style={{fontSize:10,color:p.color,fontFamily:"monospace",fontWeight:"bold",marginBottom:4}}>{p.label}</div>
-                      <div style={{fontSize:9,color:"#374151",marginBottom:8}}>{p.desc}</div>
-                      <div style={{fontSize:22,fontWeight:"bold",color:p.color,fontFamily:"monospace"}}>${fmt(p.cogsVal)}/lb</div>
-                      {annualSavings!=null&&<div style={{fontSize:10,color:"#4ade80",marginTop:6}}>{money(annualSavings)}/yr savings at current volume</div>}
+                    <div key={p.label} style={{background:"var(--bg)",borderRadius:8,padding:"16px",border:"1px solid var(--border)"}}>
+                      <div style={{fontSize:10,color:p.color,fontWeight:"bold",marginBottom:4}}>{p.label}</div>
+                      <div style={{fontSize:10,color:"var(--text-label)",marginBottom:8}}>{p.desc}</div>
+                      <div style={{fontSize:22,fontWeight:"bold",color:p.color}}>${fmt(p.cogsVal)}/lb</div>
+                      {annualSavings!=null&&<div style={{fontSize:10,color:"#16a34a",marginTop:6}}>{money(annualSavings)}/yr savings at current volume</div>}
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Top SKUs */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 22px",marginBottom:16}}>
-              <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:8}}>TOP SKUs BY GROSS PROFIT (Monthly)</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
-                {[...skuRows].sort((a,b)=>b.gpDol-a.gpDol).slice(0,6).map(s=>{
-                  const c=CAT_C[s.cat]||"#64748b";
-                  return(
-                    <div key={s.id} style={{background:"#070d18",borderRadius:8,padding:"14px",border:`1px solid ${c}33`}}>
-                      <div style={{fontSize:11,color:"#e2e8f0",fontWeight:"bold",marginBottom:2}}>{s.label}</div>
-                      <span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span>
-                      <div style={{fontSize:18,fontWeight:"bold",color:"#60a5fa",fontFamily:"monospace",marginTop:8}}>{money(s.gpDol,0)}</div>
-                      <div style={{fontSize:9,color:"#475569",marginTop:2}}>{fmt(s.gm*100,1)}% GM · ${fmt(s.gpLb)}/lb</div>
-                    </div>
-                  );
-                })}
+            {/* Charts Row: SKU Profit Bar + Revenue Mix Pie */}
+            <div className="grid gap-3.5 mb-4" style={{gridTemplateColumns:"2fr 1fr"}}>
+              {/* SKU Gross Profit Bar Chart */}
+              <div className="card p-5">
+                <div className="section-header">SKU GROSS PROFIT (Monthly)</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={[...skuRows].sort((a,b)=>b.gpDol-a.gpDol)} margin={{top:5,right:10,left:10,bottom:5}}>
+                    <XAxis dataKey="label" tick={{fontSize:10,fill:"var(--text-muted)"}} angle={-35} textAnchor="end" height={60} axisLine={{stroke:"var(--border)"}} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:"var(--text-muted)"}} axisLine={{stroke:"var(--border)"}} tickLine={false} tickFormatter={v=>"$"+v.toLocaleString()}/>
+                    <RTooltip contentStyle={{background:"var(--bg-surface)",border:"1px solid var(--border-accent)",borderRadius:8,fontSize:11}} formatter={(v)=>["$"+v.toLocaleString(),"Gross Profit"]} labelStyle={{color:"#b45309",fontWeight:"bold"}}/>
+                    <Bar dataKey="gpDol" radius={[4,4,0,0]}>
+                      {[...skuRows].sort((a,b)=>b.gpDol-a.gpDol).map((s,i)=>(
+                        <Cell key={s.id} fill={CAT_C[s.cat]||"#555555"}/>
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Revenue Mix Pie Chart */}
+              <div className="card p-5">
+                <div className="section-header">REVENUE MIX</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        {name:"Retail",value:Math.max(0,jmcNP)},
+                        ...(wsOn?[{name:"Wholesale",value:Math.max(0,wsTotGP)}]:[]),
+                        ...(phase==="Own"?[{name:"Processing Hub",value:Math.max(0,hub.net)}]:[]),
+                      ].filter(d=>d.value>0)}
+                      cx="50%" cy="45%" innerRadius={50} outerRadius={80} paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {[{c:"#16a34a"},{c:"#d97706"},{c:"#9333ea"}].map((e,i)=>(
+                        <Cell key={i} fill={e.c} stroke="none"/>
+                      ))}
+                    </Pie>
+                    <RTooltip contentStyle={{background:"var(--bg-surface)",border:"1px solid var(--border-accent)",borderRadius:8,fontSize:11}} formatter={(v)=>"$"+v.toLocaleString()}/>
+                    <Legend iconType="circle" wrapperStyle={{fontSize:10,color:"var(--text-sec)"}}/>
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
             {/* Competitive Position */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"20px 22px"}}>
-              <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:8}}>COMPETITIVE POSITIONING — LA Market</div>
-              <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.7,fontFamily:"monospace"}}>
+            <div className="card p-5">
+              <div className="section-header">COMPETITIVE POSITIONING — LA Market</div>
+              <div style={{fontSize:11,color:"var(--text-sec)",lineHeight:1.7}}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
                   <div>
-                    <div style={{color:"#f59e0b",fontWeight:"bold",marginBottom:6}}>Sourcing Advantage</div>
-                    <div style={{fontSize:10,color:"#64748b"}}>Direct Nebraska ranch partnerships. No middleman markup. Full traceability from pasture to counter.</div>
+                    <div style={{color:"#b45309",fontWeight:"bold",marginBottom:6}}>Sourcing Advantage</div>
+                    <div style={{fontSize:10,color:"var(--text-muted)"}}>Direct Nebraska ranch partnerships. No middleman markup. Full traceability from pasture to counter.</div>
                   </div>
                   <div>
-                    <div style={{color:"#f59e0b",fontWeight:"bold",marginBottom:6}}>Price Position</div>
-                    <div style={{fontSize:10,color:"#64748b"}}>Premium tier pricing — positioned between mass-market (Vons, TJ's) and ultra-premium (Cream Co., McCall's). Avg {skuRows.filter(s=>s.compDelta<0).length}/{skuRows.length} SKUs priced below comparable competitors.</div>
+                    <div style={{color:"#b45309",fontWeight:"bold",marginBottom:6}}>Price Position</div>
+                    <div style={{fontSize:10,color:"var(--text-muted)"}}>Premium tier pricing — positioned between mass-market (Vons, TJ's) and ultra-premium (Cream Co., McCall's). Avg {skuRows.filter(s=>s.compDelta<0).length}/{skuRows.length} SKUs priced below comparable competitors.</div>
                   </div>
                   <div>
-                    <div style={{color:"#f59e0b",fontWeight:"bold",marginBottom:6}}>Growth Path</div>
-                    <div style={{fontSize:10,color:"#64748b"}}>Phase 1: Retail + Wholesale. Phase 2: Owned processing hub — $1.29/lb cost reduction, external rancher revenue, vertical integration moat.</div>
+                    <div style={{color:"#b45309",fontWeight:"bold",marginBottom:6}}>Growth Path</div>
+                    <div style={{fontSize:10,color:"var(--text-muted)"}}>Phase 1: Retail + Wholesale. Phase 2: Owned processing hub — $1.29/lb cost reduction, external rancher revenue, vertical integration moat.</div>
                   </div>
                 </div>
               </div>
@@ -659,81 +761,81 @@ export default function App(){
         {/* ══ TAB 1: SKU P&L ══ */}
         {tab===1&&(
           <div>
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:7,padding:"8px 14px",marginBottom:12,fontSize:10,color:"#64748b",fontFamily:"monospace"}}>
+            <div className="card px-4 py-2.5 mb-3 text-[10px] text-stone-500 dark:text-slate-400">
               All SKU figures are <MLABEL/> — multiply by 12 for annual. Hover column headers for explanations. Adjust retail prices with sliders.
             </div>
-            <div style={{overflowX:"auto",marginBottom:12}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
+            <div className="overflow-x-auto mb-3">
+              <table className="w-full text-[11px]" style={{borderCollapse:"collapse"}}>
                 <thead>
-                  <tr style={{borderBottom:"2px solid #1e293b"}}>
+                  <tr style={{borderBottom:"2px solid var(--border)"}}>
                     {[["SKU","Product name"],["Cat","Category type"],["Mix%","% of monthly volume"],["Lbs/Mo","Lbs sold per month — monthly"],
                       ["Retail Price","Your sell price per lb — adjust with slider + number"],
                       ["vs Comp","vsComp"],["Farm","farm"],["Proc","proc"],["Trans","trans"],["COGS","cogs"],
                       ["GP/lb","gpLb"],["GM%","gm"],
                       ["Revenue/Mo","Monthly sales from this SKU"],["GP/Mo","Monthly gross profit from this SKU"]
                     ].map(([h,tipK])=>(
-                      <th key={h} style={{padding:"7px 8px",textAlign:["SKU","Cat"].includes(h)?"left":"right",color:"#475569",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                        <span {...(TIPS[tipK]||tipK?.length>10?T(tipK):{})} style={{borderBottom:TIPS[tipK]?"1px dashed #374151":"none",cursor:TIPS[tipK]?"help":"default"}}>{h}</span>
+                      <th key={h} style={{padding:"7px 8px",textAlign:["SKU","Cat"].includes(h)?"left":"right",color:"var(--text-sec)",fontSize:10,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+                        <span {...(TIPS[tipK]||tipK?.length>10?T(tipK):{})} style={{borderBottom:TIPS[tipK]?"1px dashed var(--border-dashed)":"none",cursor:TIPS[tipK]?"help":"default"}}>{h}</span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {skuRows.map((s,i)=>{
-                    const c=CAT_C[s.cat]||"#64748b";
+                    const c=CAT_C[s.cat]||"#555555";
                     const sp=prices[s.id];
                     return(
-                      <tr key={s.id} style={{borderBottom:"1px solid #1a2740",background:i%2===0?"#0c162833":"transparent"}}>
-                        <td style={{padding:"7px 8px",color:"#e2e8f0",fontWeight:"bold"}}>{s.label}</td>
-                        <td style={{padding:"7px 8px"}}><span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span></td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{Math.round(s.mix*100)}%</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{Math.round(s.spLbs)}</td>
+                      <tr key={s.id} style={{borderBottom:"1px solid var(--border-light)",background:i%2===0?"var(--bg-row)":"transparent"}}>
+                        <td style={{padding:"7px 8px",color:"var(--text)",fontWeight:"bold"}}>{s.label}</td>
+                        <td style={{padding:"7px 8px"}}><span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span></td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"var(--text-muted)"}}>{Math.round(s.mix*100)}%</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"var(--text-muted)"}}>{Math.round(s.spLbs)}</td>
                         <td style={{padding:"12px 18px",textAlign:"right",minWidth:250}}>
                           <div style={{display:"flex",alignItems:"center",gap:14,justifyContent:"flex-end"}}>
                             <input type="range" min={5} max={120} step={1} value={sp} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:100,accentColor:c}}/>
-                            <input type="number" value={sp} step={1} min={5} max={120} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:85,background:"#1e293b",color:"#f59e0b",border:"1px solid #374151",borderRadius:5,padding:"6px 10px",fontFamily:"monospace",fontSize:14,textAlign:"right"}}/>
+                            <input type="number" value={sp} step={1} min={5} max={120} onChange={e=>setP(s.id,parseFloat(e.target.value))} style={{width:100,background:"var(--border)",color:"#b45309",border:"1px solid var(--border-dashed)",borderRadius:5,padding:"6px 22px 6px 10px",fontSize:14,textAlign:"right"}}/>
                           </div>
                         </td>
-                        <td {...T("vsComp")} style={{padding:"7px 8px",textAlign:"right",color:s.compDelta>=0?"#f87171":"#4ade80",fontWeight:"bold"}}>{s.compDelta>=0?"+":""}{fmt(s.compDelta)}</td>
-                        <td {...T("farm")} style={{padding:"7px 8px",textAlign:"right",color:"#ef4444"}}>${fmt(s.fa)}</td>
-                        <td {...T("proc")} style={{padding:"7px 8px",textAlign:"right",color:phase==="3P"?"#f97316":"#fbbf24"}}>${fmt(s.pc)}</td>
-                        <td {...T("trans")} style={{padding:"7px 8px",textAlign:"right",color:"#0ea5e9"}}>${fmt(freight)}</td>
-                        <td {...T("cogs")} style={{padding:"7px 8px",textAlign:"right",color:"#fb923c",fontWeight:"bold"}}>${fmt(s.cogs)}</td>
-                        <td {...T("gpLb")} style={{padding:"7px 8px",textAlign:"right",color:s.gpLb>=0?"#4ade80":"#f87171",fontWeight:"bold"}}>${fmt(s.gpLb)}</td>
-                        <td {...T("gm")} style={{padding:"7px 8px",textAlign:"right",color:s.gm>=0.6?"#4ade80":s.gm>=0.4?"#f59e0b":"#f87171"}}>{fmt(s.gm*100,1)}%</td>
+                        <td {...T("vsComp")} style={{padding:"7px 8px",textAlign:"right",color:s.compDelta>=0?"#dc2626":"#16a34a",fontWeight:"bold"}}>{s.compDelta>=0?"+":""}{fmt(s.compDelta)}</td>
+                        <td {...T("farm")} style={{padding:"7px 8px",textAlign:"right",color:dark?"#f87171":"#ef4444"}}>${fmt(s.fa)}</td>
+                        <td {...T("proc")} style={{padding:"7px 8px",textAlign:"right",color:phase==="3P"?(dark?"#fb923c":"#c2410c"):(dark?"#fbbf24":"#d97706")}}>${fmt(s.pc)}</td>
+                        <td {...T("trans")} style={{padding:"7px 8px",textAlign:"right",color:dark?"#38bdf8":"#0369a1"}}>${fmt(freight)}</td>
+                        <td {...T("cogs")} style={{padding:"7px 8px",textAlign:"right",color:dark?"#fb923c":"#ea580c",fontWeight:"bold"}}>${fmt(s.cogs)}</td>
+                        <td {...T("gpLb")} style={{padding:"7px 8px",textAlign:"right",color:s.gpLb>=0?"#16a34a":"#dc2626",fontWeight:"bold"}}>${fmt(s.gpLb)}</td>
+                        <td {...T("gm")} style={{padding:"7px 8px",textAlign:"right",color:s.gm>=0.6?"#16a34a":s.gm>=0.4?"#b45309":"#dc2626"}}>{fmt(s.gm*100,1)}%</td>
                         <td style={{padding:"7px 8px",textAlign:"right"}}>${fmt(s.rev,0)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gpDol>=0?"#60a5fa":"#f87171",fontWeight:"bold"}}>${fmt(s.gpDol,0)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gpDol>=0?"#2563eb":"#dc2626",fontWeight:"bold"}}>${fmt(s.gpDol,0)}</td>
                       </tr>
                     );
                   })}
-                  <tr style={{borderTop:"2px solid #334155",background:"#1e293b44"}}>
-                    <td colSpan={4} style={{padding:"9px 8px",color:"#94a3b8",fontWeight:"bold"}}>MONTHLY TOTALS / WEIGHTED AVG</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#f59e0b",fontWeight:"bold"}}>${fmt(blendP)}<div style={{fontSize:8,color:"#374151"}}>blended $/lb</div></td>
+                  <tr style={{borderTop:"2px solid var(--border-accent)",background:"var(--bg-row)"}}>
+                    <td colSpan={4} style={{padding:"9px 8px",color:"var(--text-sec)",fontWeight:"bold"}}>MONTHLY TOTALS / WEIGHTED AVG</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#b45309",fontWeight:"bold"}}>${fmt(blendP)}<div style={{fontSize:8,color:"var(--text-label)"}}>blended $/lb</div></td>
                     <td colSpan={4}></td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#fb923c",fontWeight:"bold"}}>${fmt(blendC)}</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#4ade80",fontWeight:"bold"}}>${fmt(totGP/lbs)}</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#60a5fa",fontWeight:"bold"}}>{fmt(blendGM*100,1)}%</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:dc("#ea580c"),fontWeight:"bold"}}>${fmt(blendC)}</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#16a34a",fontWeight:"bold"}}>${fmt(totGP/lbs)}</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#2563eb",fontWeight:"bold"}}>{fmt(blendGM*100,1)}%</td>
                     <td style={{padding:"9px 8px",textAlign:"right",fontWeight:"bold"}}>${fmt(totRev,0)}/mo</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#60a5fa",fontWeight:"bold"}}>${fmt(totGP,0)}/mo</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#2563eb",fontWeight:"bold"}}>${fmt(totGP,0)}/mo</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+            <div className="grid grid-cols-5 gap-2.5">
               {[
-                {l:"Gross Profit",  b:"M", v:money(totGP),          s:fmt(blendGM*100,1)+"% GM",       c:"#60a5fa", tip:"grossProfitMo"},
-                {l:"Variable Fees", b:"M", v:"-"+money(varFees),     s:"2% of revenue · card & misc",    c:"#f87171", tip:"VARIABLE FEES (Monthly)\n2% of total monthly revenue.\nCovers credit card processing and misc fees."},
-                {l:"Fixed LA Costs",b:"M", v:"-"+money(fixed),       s:"Rent, staff, utilities, insur.",  c:"#f87171", tip:"LA FIXED MONTHLY COSTS\nPaid every month regardless of sales.\nDefault: $22,000/mo (rent, staff, utilities, insurance)."},
-                {l:"Net Profit",    b:"M", v:money(jmcNP),           s:"Retail bottom line",              c:jmcNP>=0?"#4ade80":"#f87171", tip:"jmcNetMo"},
-                {l:"Net Profit",    b:"Y", v:money(jmcNP*12),        s:"Monthly × 12, current run rate",  c:jmcNP>=0?"#c084fc":"#f87171", tip:"annualTotal"},
+                {l:"Gross Profit",  b:"M", v:money(totGP),          s:fmt(blendGM*100,1)+"% GM",       c:"#2563eb", tip:"grossProfitMo"},
+                {l:"Variable Fees", b:"M", v:"-"+money(varFees),     s:"2% of revenue · card & misc",    c:"#dc2626", tip:"VARIABLE FEES (Monthly)\n2% of total monthly revenue.\nCovers credit card processing and misc fees."},
+                {l:"Fixed LA Costs",b:"M", v:"-"+money(fixed),       s:"Rent, staff, utilities, insur.",  c:"#dc2626", tip:"LA FIXED MONTHLY COSTS\nPaid every month regardless of sales.\nDefault: $22,000/mo (rent, staff, utilities, insurance)."},
+                {l:"Net Profit",    b:"M", v:money(jmcNP),           s:"Retail bottom line",              c:jmcNP>=0?"#16a34a":"#dc2626", tip:"jmcNetMo"},
+                {l:"Net Profit",    b:"Y", v:money(jmcNP*12),        s:"Monthly × 12, current run rate",  c:jmcNP>=0?"#9333ea":"#dc2626", tip:"annualTotal"},
               ].map(k=>(
-                <div key={k.l+k.b} {...T(k.tip)} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:7,padding:"12px 14px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:5}}>
-                    <span style={{fontSize:9,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",borderBottom:"1px dashed #374151"}}>{k.l}</span>
+                <div key={k.l+k.b} {...T(k.tip)} className="card-hover p-3.5">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-[10px] text-stone-500 dark:text-slate-400 uppercase border-b border-dashed border-stone-300 dark:border-slate-600">{k.l}</span>
                     {k.b==="M"?<MLABEL/>:<YLABEL/>}
                   </div>
-                  <div style={{fontSize:19,fontWeight:"bold",color:k.c,fontFamily:"monospace"}}>{k.v}</div>
-                  <div style={{fontSize:10,color:"#475569",marginTop:3}}>{k.s}</div>
+                  <div className="text-lg font-bold" style={{color:k.c}}>{k.v}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">{k.s}</div>
                 </div>
               ))}
             </div>
@@ -742,33 +844,35 @@ export default function App(){
 
         {/* ══ TAB 2: SCENARIOS ══ */}
         {tab===2&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            {[{label:"PHASE 1 — 3rd-Party Processing",color:"#f59e0b",cogsLb:cogs3P,withHub:false},
-              {label:`PHASE 2 — ${numLoc} Owned Location${numLoc!==1?"s":""}`,color:"#22c55e",cogsLb:cogsOwn,withHub:true}
+          <div className="grid grid-cols-1 gap-4">
+            {[{label:"PHASE 1 — 3rd-Party Processing",color:"#b45309",cogsLb:cogs3P,withHub:false},
+              {label:`PHASE 2 — ${numLoc} Owned Location${numLoc!==1?"s":""}`,color:"#15803d",cogsLb:cogsOwn,withHub:true}
             ].map(ph=>(
-              <div key={ph.label} style={{background:"#0c1628",border:`1px solid ${ph.withHub?"#166534":"#1e293b"}`,borderRadius:8,padding:"16px 18px"}}>
-                <div style={{fontSize:11,color:ph.color,fontFamily:"monospace",fontWeight:"bold",marginBottom:4}}>{ph.label}</div>
-                <div style={{fontSize:9,color:"#374151",fontFamily:"monospace",marginBottom:12}}>All figures are MONTHLY. Annual column = Monthly × 12.</div>
-                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
-                  <thead><tr style={{borderBottom:"1px solid #1e293b"}}>
+              <div key={ph.label} className="card p-5" style={{borderColor:ph.withHub?(dark?"var(--border-accent)":"#86efac"):undefined}}>
+                <div className="text-[11px] font-bold mb-1" style={{color:dc(ph.color)}}>{ph.label}</div>
+                <div className="text-[10px] text-stone-500 dark:text-slate-400 mb-3">All figures are MONTHLY. Annual column = Monthly × 12.</div>
+                <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:ph.withHub?10:11}}>
+                  <thead><tr style={{borderBottom:"1px solid var(--border)"}}>
                     {["Lbs/Mo","Revenue/Mo","Gross Profit/Mo",ph.withHub?"Hub Net/Mo":"","Fixed+Fees/Mo","Net Profit/Mo","Annual Net"].filter(Boolean).map(h=>(
-                      <th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#475569",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                      <th key={h} style={{padding:"6px 6px",textAlign:"right",color:"var(--text-sec)",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr></thead>
                   <tbody>{[1200,2000,3000,5000,10000].map(v=>{
                     const r=v*blendP, c2=v*ph.cogsLb, gp2=r-c2, fees=r*.02;
                     const np=gp2+(ph.withHub?hub.net:0)-fees-fixed;
                     const cur=v===lbs;
-                    return(<tr key={v} style={{borderBottom:"1px solid #1a2740",background:cur?"#1e293b55":"transparent"}}>
-                      <td style={{padding:"8px",color:cur?ph.color:"#64748b",fontWeight:cur?"bold":"normal"}}>{v.toLocaleString()}lb{cur?" ◄":""}</td>
-                      <td style={{padding:"8px",textAlign:"right"}}>${fmt(r,0)}</td>
-                      <td style={{padding:"8px",textAlign:"right",color:"#60a5fa"}}>${fmt(gp2,0)}</td>
-                      {ph.withHub&&<td style={{padding:"8px",textAlign:"right",color:hub.net>=0?"#4ade80":"#f87171"}}>{money(hub.net)}</td>}
-                      <td style={{padding:"8px",textAlign:"right",color:"#f87171"}}>${fmt(fixed+fees,0)}</td>
-                      <td style={{padding:"8px",textAlign:"right",color:np>=0?"#4ade80":"#f87171",fontWeight:"bold"}}>{money(np)}</td>
-                      <td style={{padding:"8px",textAlign:"right",color:np>=0?"#c084fc":"#f87171"}}>{money(np*12)}</td>
+                    return(<tr key={v} style={{borderBottom:"1px solid var(--border-light)",background:cur?"var(--bg-alt)":"transparent"}}>
+                      <td style={{padding:"6px",color:cur?dc(ph.color):"var(--text-muted)",fontWeight:cur?"bold":"normal",whiteSpace:"nowrap"}}>{v.toLocaleString()}lb{cur?" ◄":""}</td>
+                      <td style={{padding:"6px",textAlign:"right",color:"var(--text)"}}>${fmt(r,0)}</td>
+                      <td style={{padding:"6px",textAlign:"right",color:dc("#2563eb")}}>${fmt(gp2,0)}</td>
+                      {ph.withHub&&<td style={{padding:"6px",textAlign:"right",color:hub.net>=0?dc("#16a34a"):dc("#dc2626")}}>{money(hub.net)}</td>}
+                      <td style={{padding:"6px",textAlign:"right",color:dc("#dc2626")}}>${fmt(fixed+fees,0)}</td>
+                      <td style={{padding:"6px",textAlign:"right",color:np>=0?dc("#16a34a"):dc("#dc2626"),fontWeight:"bold"}}>{money(np)}</td>
+                      <td style={{padding:"6px",textAlign:"right",color:np>=0?dc("#9333ea"):dc("#dc2626")}}>{money(np*12)}</td>
                     </tr>);
                   })}</tbody>
                 </table>
+                </div>
               </div>
             ))}
           </div>
@@ -776,36 +880,65 @@ export default function App(){
 
         {/* ══ TAB 3: COMPETITORS ══ */}
         {tab===3&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            {COMPS.map((store,i)=>(
-              <div key={i} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"14px 16px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:12,color:"#e2e8f0",fontWeight:"bold"}}>{store.store}</span>
-                  <span style={{fontSize:9,padding:"2px 7px",borderRadius:10,background:"#1e293b",color:"#64748b",fontFamily:"monospace"}}>{store.tier}</span>
-                </div>
-                {store.items.map((item,j)=>(
-                  <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"4px 6px",background:"#070d18",borderRadius:4,marginBottom:3}}>
-                    <span style={{fontSize:10,color:"#94a3b8"}}>{item.n}</span>
-                    <span {...T("RETAIL PRICE OBSERVED IN PERSON\nSurveyed April 10, 2026.\nThis is retail price to consumers — not wholesale.\nSource: "+store.store)}
-                      style={{fontSize:11,fontWeight:"bold",color:"#4ade80",fontFamily:"monospace"}}>${fmt(item.p)}/lb</span>
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <div style={{fontSize:11,color:"var(--text-sec)",fontWeight:"bold"}}>COMPETITOR PRICE SURVEY — Editable <span style={{fontSize:10,color:"var(--text-muted)",fontWeight:"normal"}}>Click any field to edit · Changes reflect in SKU P&L "vs Comp" column</span></div>
+              <button onClick={addCompStore} className="btn-primary text-[10px]">+ Add Store</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {compData.map((store,i)=>(
+                <div key={i} className="card p-4">
+                  <div className="flex justify-between items-center mb-3 pb-2" style={{borderBottom:"1px solid var(--border)"}}>
+                    <input type="text" value={store.store} onChange={e=>updateComp(i,"store",e.target.value)}
+                      style={{fontSize:13,fontWeight:700,color:"var(--text)",background:"transparent",border:"none",outline:"none",width:"55%",padding:"2px 0"}}
+                      className="hover:bg-stone-100 dark:hover:bg-slate-800 focus:bg-stone-50 dark:focus:bg-slate-700 rounded px-1 -ml-1 transition-colors"/>
+                    <div className="flex items-center gap-2">
+                      <select value={store.tier} onChange={e=>updateComp(i,"tier",e.target.value)}
+                        style={{fontSize:10,background:"var(--bg-surface)",color:"var(--text-muted)",border:"1px solid var(--border)",borderRadius:4,padding:"2px 6px",cursor:"pointer",outline:"none"}}>
+                        {TIER_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                      {compData.length>1&&<button onClick={()=>removeCompStore(i)} style={{fontSize:10,color:"#dc2626",cursor:"pointer",background:"none",border:"none",padding:"2px 4px"}} title="Remove store">✕</button>}
+                    </div>
                   </div>
-                ))}
-              </div>
-            ))}
+                  <div className="space-y-0.5">
+                    {store.items.map((item,j)=>(
+                      <div key={j} className="flex justify-between items-center px-2 py-1.5 rounded-md" style={{background:"var(--bg-surface)"}}>
+                        <input type="text" value={item.n} onChange={e=>updateCompItem(i,j,"n",e.target.value)}
+                          style={{fontSize:11,color:"var(--text-sec)",background:"transparent",border:"none",outline:"none",width:"50%",padding:"2px 0"}}
+                          className="hover:bg-stone-200 dark:hover:bg-slate-700 focus:bg-stone-100 dark:focus:bg-slate-600 rounded px-1 -ml-1 transition-colors"/>
+                        <div className="flex items-center gap-2">
+                          <span style={{fontSize:11,color:"var(--text-sec)"}}>$</span>
+                          <input type="number" value={item.p} step={0.01} min={0} onChange={e=>updateCompItem(i,j,"p",e.target.value)}
+                            style={{width:70,fontSize:12,fontWeight:700,color:"#16a34a",background:"transparent",border:"1px solid var(--border)",borderRadius:4,padding:"3px 6px",textAlign:"right",outline:"none"}}/>
+                          <span style={{fontSize:10,color:"var(--text-muted)"}}>/lb</span>
+                          <button onClick={()=>removeCompItem(i,j)} style={{fontSize:9,color:"#dc2626",cursor:"pointer",background:"none",border:"none",padding:"1px 3px",opacity:0.5}} title="Remove item">✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={()=>addCompItem(i)} style={{fontSize:10,color:"var(--text-muted)",cursor:"pointer",background:"none",border:"1px dashed var(--border-dashed)",borderRadius:4,padding:"4px 10px",marginTop:6,width:"100%"}}
+                    className="hover:bg-stone-100 dark:hover:bg-slate-800 transition-colors">+ Add Cut</button>
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:10,padding:"10px 14px",background:"var(--bg-surface)",border:"1px solid var(--border)",borderRadius:6,fontSize:10,color:"var(--text-muted)",lineHeight:1.7}}>
+              <b>Source:</b> In-person retail price survey, Los Angeles area, April 10, 2026. Prices are shelf price to consumers (not wholesale). Edit any field above — changes automatically update the "vs Comp" column in the SKU P&L tab. The comparison uses the average price across all stores for each matching cut.
+            </div>
           </div>
         )}
 
         {/* ══ TAB 4: PROCESSING SCALE ══ */}
         {tab===4&&(
           <div>
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"16px 18px",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                <span style={{fontSize:11,color:"#a855f7",fontFamily:"monospace",fontWeight:"bold"}}>LOCATION MATRIX — 1 to 10 Plants</span>
-                <span style={{fontSize:9,color:"#374151",fontFamily:"monospace"}}>All figures MONTHLY unless marked ANNUAL · Click location number to switch model</span>
+            <div className="card p-5 mb-3.5">
+              <div className="flex items-center gap-2 mb-2">
+                <Factory size={14} className="text-violet-400"/>
+                <span className="text-[11px] text-violet-600 font-bold">LOCATION MATRIX — 1 to 10 Plants</span>
+                <span className="text-[10px] text-stone-500 dark:text-slate-400">All figures MONTHLY unless marked ANNUAL · Click location number to switch model</span>
               </div>
               <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
-                  <thead><tr style={{borderBottom:"2px solid #1e293b"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead><tr style={{borderBottom:"2px solid var(--border)"}}>
                     {[
                       ["Locations","Number of plants you own"],
                       ["Total Cap","Max heads/mo across all plants"],
@@ -816,35 +949,35 @@ export default function App(){
                       ["At 100% Full — Monthly","Hub net at maximum capacity"],
                       ["Annual Max","Best-case annual hub profit at full capacity"],
                     ].map(([h,tip2])=>(
-                      <th key={h} style={{padding:"7px 9px",textAlign:"right",color:"#475569",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                        <span {...T(tip2)} style={{borderBottom:"1px dashed #374151",cursor:"help"}}>{h}</span>
+                      <th key={h} style={{padding:"7px 9px",textAlign:"right",color:"var(--text-sec)",fontSize:10,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+                        <span {...T(tip2)} style={{borderBottom:"1px dashed var(--border-dashed)",cursor:"help"}}>{h}</span>
                       </th>
                     ))}</tr></thead>
                   <tbody>{locMatrix.map(row=>(
-                    <tr key={row.loc} style={{borderBottom:"1px solid #1a2740",background:row.current?"#1e293b66":"transparent",borderLeft:row.current?"3px solid #fbbf24":"3px solid transparent"}}>
+                    <tr key={row.loc} style={{borderBottom:"1px solid var(--border-light)",background:row.current?"var(--bg-row)":"transparent",borderLeft:row.current?"3px solid #d97706":"3px solid transparent"}}>
                       <td style={{padding:"8px 9px",textAlign:"right"}}>
-                        <button onClick={()=>setNumLoc(row.loc)} style={{background:row.current?"#fbbf24":"#1e293b",color:row.current?"#000":"#94a3b8",border:`1px solid ${row.current?"#fbbf24":"#374151"}`,borderRadius:5,padding:"3px 10px",cursor:"pointer",fontFamily:"monospace",fontSize:11,fontWeight:row.current?"bold":"normal"}}>{row.loc}{row.current?" ◄":""}</button>
+                        <button onClick={()=>setNumLoc(row.loc)} style={{background:row.current?"#d97706":"var(--border)",color:row.current?"#000":"var(--text-sec)",border:`1px solid ${row.current?"#d97706":"var(--text-label)"}`,borderRadius:5,padding:"3px 10px",cursor:"pointer",fontSize:11,fontWeight:row.current?"bold":"normal"}}>{row.loc}{row.current?" ◄":""}</button>
                       </td>
-                      <td style={{padding:"8px 9px",textAlign:"right",color:"#a855f7"}}>{row.cap} hd</td>
-                      <td {...T("hubFixed")} style={{padding:"8px 9px",textAlign:"right",color:"#f87171",cursor:"help"}}>${fmt(row.fix,0)}/mo</td>
-                      <td {...T("hubBE")} style={{padding:"8px 9px",textAlign:"right",color:"#fbbf24",cursor:"help"}}>{row.be} hd</td>
-                      <td style={{padding:"8px 9px",textAlign:"right",color:row.at50>=0?"#4ade80":"#f87171"}}>{money(row.at50)}/mo</td>
-                      <td style={{padding:"8px 9px",textAlign:"right",color:row.at75>=0?"#4ade80":"#f87171"}}>{money(row.at75)}/mo</td>
-                      <td style={{padding:"8px 9px",textAlign:"right",color:row.atMax>=0?"#22c55e":"#f87171",fontWeight:"bold"}}>{money(row.atMax)}/mo</td>
-                      <td style={{padding:"8px 9px",textAlign:"right",color:row.atMax>=0?"#c084fc":"#f87171"}}>{money(row.atMax*12)}/yr</td>
+                      <td style={{padding:"8px 9px",textAlign:"right",color:"#7c3aed"}}>{row.cap} hd</td>
+                      <td {...T("hubFixed")} style={{padding:"8px 9px",textAlign:"right",color:"#dc2626",cursor:"help"}}>${fmt(row.fix,0)}/mo</td>
+                      <td {...T("hubBE")} style={{padding:"8px 9px",textAlign:"right",color:"#d97706",cursor:"help"}}>{row.be} hd</td>
+                      <td style={{padding:"8px 9px",textAlign:"right",color:row.at50>=0?"#16a34a":"#dc2626"}}>{money(row.at50)}/mo</td>
+                      <td style={{padding:"8px 9px",textAlign:"right",color:row.at75>=0?"#16a34a":"#dc2626"}}>{money(row.at75)}/mo</td>
+                      <td style={{padding:"8px 9px",textAlign:"right",color:row.atMax>=0?"#15803d":"#dc2626",fontWeight:"bold"}}>{money(row.atMax)}/mo</td>
+                      <td style={{padding:"8px 9px",textAlign:"right",color:row.atMax>=0?"#9333ea":"#dc2626"}}>{money(row.atMax*12)}/yr</td>
                     </tr>
                   ))}</tbody>
                 </table>
               </div>
             </div>
 
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"16px 18px"}}>
-              <div style={{fontSize:11,color:"#22c55e",fontFamily:"monospace",fontWeight:"bold",marginBottom:4}}>
+            <div className="card p-5">
+              <div className="text-[11px] text-emerald-600 font-bold mb-2">
                 HEAD-BY-HEAD — {numLoc} Location{numLoc!==1?"s":" ("+hub.cap+" head cap)"} · All figures MONTHLY
               </div>
               <div style={{overflowX:"auto",maxHeight:380}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
-                  <thead><tr style={{borderBottom:"2px solid #1e293b",position:"sticky",top:0,background:"#0c1628"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead><tr style={{borderBottom:"2px solid var(--border)",position:"sticky",top:0,background:"var(--bg-card)"}}>
                     {[["Ext Heads","External heads processed this month"],
                       ["Utilization %","% of total plant capacity being used"],
                       ["Gross Rev/Mo","Monthly revenue from processing ext heads"],
@@ -855,8 +988,8 @@ export default function App(){
                       ["Combined NP/Mo","Hub + JMC retail net — monthly total"],
                       ["Annual Combined","Monthly combined × 12"],
                     ].map(([h,t])=>(
-                      <th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#475569",fontSize:8,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                        <span {...T(t)} style={{borderBottom:"1px dashed #374151",cursor:"help"}}>{h}</span>
+                      <th key={h} style={{padding:"6px 8px",textAlign:"right",color:"var(--text-sec)",fontSize:8,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+                        <span {...T(t)} style={{borderBottom:"1px dashed var(--border-dashed)",cursor:"help"}}>{h}</span>
                       </th>
                     ))}</tr></thead>
                   <tbody>{headRows.map((h2,i)=>{
@@ -864,18 +997,18 @@ export default function App(){
                     const combined=jmcNP+hh.net;
                     const isCur=h2===hub.h;
                     return(
-                      <tr key={i} style={{borderBottom:"1px solid #1a2740",background:isCur?"#14532d55":"transparent",borderLeft:isCur?"3px solid #4ade80":"3px solid transparent"}}>
+                      <tr key={i} style={{borderBottom:"1px solid var(--border-light)",background:isCur?"#dcfce755":"transparent",borderLeft:isCur?"3px solid #16a34a":"3px solid transparent"}}>
                         <td style={{padding:"7px 8px",textAlign:"right"}}>
-                          <button onClick={()=>setExtH(h2)} style={{background:isCur?"#4ade80":"#1e293b",color:isCur?"#000":"#94a3b8",border:`1px solid ${isCur?"#4ade80":"#374151"}`,borderRadius:4,padding:"2px 8px",cursor:"pointer",fontFamily:"monospace",fontSize:11}}>{h2}{isCur?" ◄":""}</button>
+                          <button onClick={()=>setExtH(h2)} style={{background:isCur?"#16a34a":"var(--border)",color:isCur?"#000":"var(--text-sec)",border:`1px solid ${isCur?"#16a34a":"var(--text-label)"}`,borderRadius:4,padding:"2px 8px",cursor:"pointer",fontSize:11}}>{h2}{isCur?" ◄":""}</button>
                         </td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{Math.round(hh.util*100)}%</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#4ade80"}}>{money(hh.gross)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#f87171"}}>{money(hh.varC)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#f87171"}}>{money(hh.fixed)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:hh.net>=0?"#22c55e":"#f87171",fontWeight:"bold"}}>{money(hh.net)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:jmcNP>=0?"#60a5fa":"#f87171"}}>{money(jmcNP)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:combined>=0?"#4ade80":"#f87171",fontWeight:"bold"}}>{money(combined)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:combined>=0?"#c084fc":"#f87171"}}>{money(combined*12)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"var(--text-muted)"}}>{Math.round(hh.util*100)}%</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#16a34a"}}>{money(hh.gross)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#dc2626"}}>{money(hh.varC)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#dc2626"}}>{money(hh.fixed)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:hh.net>=0?"#15803d":"#dc2626",fontWeight:"bold"}}>{money(hh.net)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:jmcNP>=0?"#2563eb":"#dc2626"}}>{money(jmcNP)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:combined>=0?"#16a34a":"#dc2626",fontWeight:"bold"}}>{money(combined)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:combined>=0?"#9333ea":"#dc2626"}}>{money(combined*12)}</td>
                       </tr>
                     );
                   })}</tbody>
@@ -889,52 +1022,53 @@ export default function App(){
         {tab===5&&(
           <div>
             {/* Controls */}
-            <div style={{background:"#1a1000",border:"1px solid #92400e",borderRadius:8,padding:"14px 20px",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:"#fbbf24",fontFamily:"monospace",fontWeight:"bold"}}>⑤ WHOLESALE CHANNEL — Sell Bulk to LA Restaurants</span>
-                <span {...T("WHOLESALE CHANNEL\nSell beef in bulk directly to restaurants at lower prices.\nThis is ADDITIONAL revenue on top of your retail shop.\nKey differences vs retail:\n• Lower price/lb (40–60% below retail)\n• Lower shrink (3% vs 8%) — bulk delivery, less display waste\n• Lower card fee (1% — invoiced accounts)\n• No separate fixed cost allocation")} style={{fontSize:10,color:"#f59e0b",borderBottom:"1px dashed #92400e",cursor:"help"}}>what is this?</span>
+            <div className="rounded-xl border border-yellow-800 p-5 mb-3.5" style={{background:"var(--bg-input)"}}>
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <Truck size={14} className="text-amber-400"/>
+                <span className="text-[11px] text-amber-700 font-bold">⑤ WHOLESALE CHANNEL — Sell Bulk to LA Restaurants</span>
+                <span {...T("WHOLESALE CHANNEL\nSell beef in bulk directly to restaurants at lower prices.\nThis is ADDITIONAL revenue on top of your retail shop.\nKey differences vs retail:\n• Lower price/lb (40–60% below retail)\n• Lower shrink (3% vs 8%) — bulk delivery, less display waste\n• Lower card fee (1% — invoiced accounts)\n• No separate fixed cost allocation")} style={{fontSize:10,color:"#b45309",borderBottom:"1px dashed #fbbf24",cursor:"help"}}>what is this?</span>
                 <button onClick={()=>setWsOn(v=>!v)} style={{
-                  padding:"5px 14px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,fontWeight:"bold",
-                  border:`2px solid ${wsOn?"#f59e0b":"#374151"}`,
-                  background:wsOn?"#f59e0b22":"#1e293b",
-                  color:wsOn?"#fbbf24":"#475569",
+                  padding:"5px 14px",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:"bold",
+                  border:`2px solid ${wsOn?"#b45309":"var(--text-label)"}`,
+                  background:wsOn?"#b4530922":"var(--border)",
+                  color:wsOn?"#d97706":"var(--text-sec)",
                   marginLeft:"auto",
                 }}>{wsOn?"✓ Channel ACTIVE":"✗ Channel OFF — click to activate"}</button>
-                {!wsOn&&<span style={{fontSize:10,color:"#92400e",fontFamily:"monospace"}}>Not included in combined totals until activated</span>}
+                {!wsOn&&<span style={{fontSize:10,color:"#fbbf24"}}>Not included in combined totals until activated</span>}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:20}}>
-                {S("WS Volume/Month (lb)",wsLbs,setWsLbs,0,20000,50,v=>v.toLocaleString()+"lb","#fbbf24","wsGPMo")}
-                {S("WS Shrink %",wsShrink,setWsShrink,0.01,0.08,0.005,v=>Math.round(v*100)+"%","#f59e0b","WHOLESALE SHRINK %\nLower than retail (3% default vs 8%).\nBulk delivery = no display sitting out.\nLower shrink = better margins.")}
-                <div style={{background:"#0c1628",border:"1px solid #92400e",borderRadius:7,padding:"10px 14px"}}>
-                  <div style={{fontSize:9,color:"#fbbf24",fontFamily:"monospace",marginBottom:6}}>WHOLESALE P&L <MLABEL/></div>
+                {S("WS Volume/Month (lb)",wsLbs,setWsLbs,0,20000,50,v=>v.toLocaleString()+"lb","#d97706","wsGPMo")}
+                {S("WS Shrink %",wsShrink,setWsShrink,0.01,0.08,0.005,v=>Math.round(v*100)+"%","#b45309","WHOLESALE SHRINK %\nLower than retail (3% default vs 8%).\nBulk delivery = no display sitting out.\nLower shrink = better margins.")}
+                <div style={{background:"var(--bg-card)",border:"1px solid #fbbf24",borderRadius:7,padding:"10px 14px"}}>
+                  <div style={{fontSize:10,color:"#d97706",marginBottom:6}}>WHOLESALE P&L <MLABEL/></div>
                   {[
-                    ["Volume",wsLbs.toLocaleString()+" lb","#e2e8f0","Total monthly lbs sold wholesale"],
-                    ["Blended WS Price","$"+fmt(wsBlendP)+"/lb","#fbbf24","Average sell price across all cuts"],
-                    ["Revenue/Mo",money(wsTotRev),"#4ade80","wsGPMo"],
-                    ["Gross Profit/Mo",money(wsTotGP),"#60a5fa","wsGPMo"],
-                    ["Gross Margin",fmt(wsBlendGM*100,1)+"%","#60a5fa","Wholesale gross margin — lower than retail but no fixed cost required"],
+                    ["Volume",wsLbs.toLocaleString()+" lb","var(--text)","Total monthly lbs sold wholesale"],
+                    ["Blended WS Price","$"+fmt(wsBlendP)+"/lb","#d97706","Average sell price across all cuts"],
+                    ["Revenue/Mo",money(wsTotRev),"#16a34a","wsGPMo"],
+                    ["Gross Profit/Mo",money(wsTotGP),"#2563eb","wsGPMo"],
+                    ["Gross Margin",fmt(wsBlendGM*100,1)+"%","#2563eb","Wholesale gross margin — lower than retail but no fixed cost required"],
                   ].map(([k,v,c,tK])=>(
-                    <div key={k} {...T(tK)} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid #1a2740"}}>
-                      <span style={{fontSize:9,color:"#475569",fontFamily:"monospace",borderBottom:"1px dashed #374151"}}>{k}</span>
-                      <span style={{fontSize:10,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{v}</span>
+                    <div key={k} {...T(tK)} style={{display:"flex",justifyContent:"space-between",padding:"2px 0",borderBottom:"1px solid var(--border-light)"}}>
+                      <span style={{fontSize:10,color:"var(--text-sec)",borderBottom:"1px dashed var(--border-dashed)"}}>{k}</span>
+                      <span style={{fontSize:10,fontWeight:"bold",color:c}}>{v}</span>
                     </div>
                   ))}
                 </div>
-                <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:7,padding:"10px 14px"}}>
-                  <div style={{fontSize:9,color:"#4ade80",fontFamily:"monospace",marginBottom:6}}>ALL CHANNELS — <MLABEL/> & <YLABEL/></div>
+                <div style={{background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:7,padding:"10px 14px"}}>
+                  <div style={{fontSize:10,color:"#16a34a",marginBottom:6}}>ALL CHANNELS — <MLABEL/> & <YLABEL/></div>
                   {[
-                    ["Retail NP/mo",money(jmcNP),jmcNP>=0?"#4ade80":"#f87171","jmcNetMo","M"],
-                    ["WS GP/mo",wsOn?money(wsTotGP):"(channel off)","#fbbf24","wsGPMo","M"],
-                    ["Hub net/mo",phase==="Own"?money(hub.net):"—",phase==="Own"?(hub.net>=0?"#22c55e":"#f87171"):"#374151","hubNetMo","M"],
-                    ["TOTAL/mo",money(totalMo),totalMo>=0?"#4ade80":"#f87171","totalMo","M"],
-                    ["ANNUAL TOTAL",money(totalMo*12),totalMo>=0?"#c084fc":"#f87171","annualTotal","Y"],
+                    ["Retail NP/mo",money(jmcNP),jmcNP>=0?"#16a34a":"#dc2626","jmcNetMo","M"],
+                    ["WS GP/mo",wsOn?money(wsTotGP):"(channel off)","#d97706","wsGPMo","M"],
+                    ["Hub net/mo",phase==="Own"?money(hub.net):"—",phase==="Own"?(hub.net>=0?"#15803d":"#dc2626"):"var(--text-label)","hubNetMo","M"],
+                    ["TOTAL/mo",money(totalMo),totalMo>=0?"#16a34a":"#dc2626","totalMo","M"],
+                    ["ANNUAL TOTAL",money(totalMo*12),totalMo>=0?"#9333ea":"#dc2626","annualTotal","Y"],
                   ].map(([k,v,c,tK,badge])=>(
-                    <div key={k} {...T(tK)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"2px 0",borderBottom:"1px solid #1a2740"}}>
+                    <div key={k} {...T(tK)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"2px 0",borderBottom:"1px solid var(--border-light)"}}>
                       <div>
-                        <span style={{fontSize:9,color:"#475569",fontFamily:"monospace",borderBottom:"1px dashed #374151"}}>{k}</span>
+                        <span style={{fontSize:10,color:"var(--text-sec)",borderBottom:"1px dashed var(--border-dashed)"}}>{k}</span>
                         {badge==="M"?<MLABEL/>:<YLABEL/>}
                       </div>
-                      <span style={{fontSize:10,fontWeight:"bold",color:c,fontFamily:"monospace"}}>{v}</span>
+                      <span style={{fontSize:10,fontWeight:"bold",color:c}}>{v}</span>
                     </div>
                   ))}
                 </div>
@@ -942,11 +1076,11 @@ export default function App(){
             </div>
 
             {/* Wholesale Price Sheet */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"16px 18px",marginBottom:14}}>
-              <div style={{fontSize:11,color:"#fbbf24",fontFamily:"monospace",fontWeight:"bold",marginBottom:4}}>WHOLESALE PRICE SHEET — Set Your B2B Price Per Cut <span style={{fontSize:9,color:"#374151",fontWeight:"normal"}}>All figures MONTHLY</span></div>
+            <div style={{background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:8,padding:"16px 18px",marginBottom:14}}>
+              <div style={{fontSize:11,color:"#d97706",fontWeight:"bold",marginBottom:4}}>WHOLESALE PRICE SHEET — Set Your B2B Price Per Cut <span style={{fontSize:10,color:"var(--text-label)",fontWeight:"normal"}}>All figures MONTHLY</span></div>
               <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
-                  <thead><tr style={{borderBottom:"2px solid #1e293b"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead><tr style={{borderBottom:"2px solid var(--border)"}}>
                     {[["SKU","Product"],
                       ["USDA WS Low","usdaWS"],["USDA WS High","usdaWS"],
                       ["Your WS Price","wsPrice"],["vs USDA Mid","VS USDA WHOLESALE MIDPOINT\nNegative = you're below market (room to raise).\nPositive = you're above market (may face resistance)."],
@@ -957,67 +1091,70 @@ export default function App(){
                       ["WS Rev/Mo","Monthly wholesale revenue from this cut"],
                       ["WS GP/Mo","Monthly wholesale gross profit from this cut — adds to your combined total"],
                     ].map(([h,tK])=>(
-                      <th key={h} style={{padding:"7px 8px",textAlign:h==="SKU"?"left":"right",color:"#475569",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                        <span {...T(tK)} style={{borderBottom:tK?"1px dashed #374151":"none",cursor:tK?"help":"default"}}>{h}</span>
+                      <th key={h} style={{padding:"7px 8px",textAlign:h==="SKU"?"left":"right",color:"var(--text-sec)",fontSize:10,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+                        <span {...T(tK)} style={{borderBottom:tK?"1px dashed var(--border-dashed)":"none",cursor:tK?"help":"default"}}>{h}</span>
                       </th>
                     ))}</tr></thead>
                   <tbody>{wsRows.map((s,i)=>{
                     const inRange=s.uLo!=null&&s.wsP>=s.uLo&&s.wsP<=s.uHi;
-                    const c=CAT_C[s.cat]||"#64748b";
+                    const c=CAT_C[s.cat]||"#555555";
                     return(
-                      <tr key={s.id} style={{borderBottom:"1px solid #1a2740",background:i%2===0?"#0c162833":"transparent"}}>
+                      <tr key={s.id} style={{borderBottom:"1px solid var(--border-light)",background:i%2===0?"var(--bg-row)":"transparent"}}>
                         <td style={{padding:"7px 8px"}}>
-                          <div style={{fontWeight:"bold",color:"#e2e8f0"}}>{s.label}</div>
-                          <span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span>
+                          <div style={{fontWeight:"bold",color:"var(--text)"}}>{s.label}</div>
+                          <span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:c+"22",color:c,border:`1px solid ${c}44`}}>{s.cat}</span>
                         </td>
-                        <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#22c55e",cursor:"help"}}>{s.uLo?"$"+fmt(s.uLo):"—"}</td>
-                        <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#22c55e",cursor:"help"}}>{s.uHi?"$"+fmt(s.uHi):"—"}</td>
+                        <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#15803d",cursor:"help"}}>{s.uLo?"$"+fmt(s.uLo):"—"}</td>
+                        <td {...T("usdaWS")} style={{padding:"7px 8px",textAlign:"right",color:"#15803d",cursor:"help"}}>{s.uHi?"$"+fmt(s.uHi):"—"}</td>
                         <td style={{padding:"10px 16px",textAlign:"right",minWidth:230}}>
                           <div style={{display:"flex",alignItems:"center",gap:12,justifyContent:"flex-end"}}>
                             <div style={{position:"relative",width:90}}>
-                              <input type="range" min={2} max={70} step={1} value={s.wsP} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:"100%",accentColor:inRange?"#fbbf24":"#94a3b8"}}/>
-                              {s.uLo&&<div style={{position:"absolute",top:7,height:3,borderRadius:2,background:"#22c55e55",pointerEvents:"none",left:`${(s.uLo/70)*100}%`,width:`${((s.uHi-s.uLo)/70)*100}%`}}/>}
+                              <input type="range" min={2} max={70} step={1} value={s.wsP} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:"100%",accentColor:inRange?"#d97706":"var(--text-sec)"}}/>
+                              {s.uLo&&<div style={{position:"absolute",top:4,height:8,borderRadius:4,background:"#16a34a",opacity:0.35,pointerEvents:"none",left:`${(s.uLo/70)*100}%`,width:`${((s.uHi-s.uLo)/70)*100}%`,border:"1px solid #16a34a"}}/>}
                             </div>
-                            <input type="number" value={s.wsP} step={1} min={2} max={70} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:85,background:"#1a1000",color:"#fbbf24",border:`1px solid ${inRange?"#92400e":"#374151"}`,borderRadius:5,padding:"6px 10px",fontFamily:"monospace",fontSize:14,textAlign:"right"}}/>
+                            <input type="number" value={s.wsP} step={1} min={2} max={70} onChange={e=>setWP(s.id,parseFloat(e.target.value))} style={{width:100,background:"var(--bg-input)",color:"#d97706",border:`1px solid ${inRange?"#fbbf24":"var(--text-label)"}`,borderRadius:5,padding:"6px 22px 6px 10px",fontSize:14,textAlign:"right"}}/>
                           </div>
-                          <div style={{fontSize:8,textAlign:"right",color:inRange?"#22c55e":"#64748b",fontFamily:"monospace",marginTop:1}}>{inRange?"✓ in USDA range":s.wsP<(s.uLo||0)?"↓ below market":"↑ above market"}</div>
+                          <div style={{fontSize:9,textAlign:"right",color:inRange?"#15803d":"#b45309",fontWeight:inRange?"600":"normal",marginTop:2}}>{inRange?"✓ In USDA range":s.wsP<(s.uLo||0)?"↓ Below market":"↑ Above market"}</div>
                         </td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:s.vsMid!=null?(Math.abs(s.vsMid)<10?"#f59e0b":s.vsMid>0?"#f87171":"#4ade80"):"#64748b",fontWeight:"bold"}}>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:s.vsMid!=null?(Math.abs(s.vsMid)<10?"#b45309":s.vsMid>0?"#dc2626":"#16a34a"):"var(--text-muted)",fontWeight:"bold"}}>
                           {s.vsMid!=null?(s.vsMid>0?"+":"")+fmt(s.vsMid,1)+"%":"—"}
                         </td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#f87171"}}>{fmt(s.vsRetail,1)}%</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:"#fb923c"}}>${fmt(s.cogsWS)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gpLb>=0?"#4ade80":"#f87171",fontWeight:"bold"}}>${fmt(s.gpLb)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gm>=0.25?"#4ade80":s.gm>=0.10?"#f59e0b":"#f87171"}}>{fmt(s.gm*100,1)}%</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:"#dc2626"}}>{fmt(s.vsRetail,1)}%</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:dc("#ea580c")}}>${fmt(s.cogsWS)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gpLb>=0?"#16a34a":"#dc2626",fontWeight:"bold"}}>${fmt(s.gpLb)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gm>=0.25?"#16a34a":s.gm>=0.10?"#b45309":"#dc2626"}}>{fmt(s.gm*100,1)}%</td>
                         <td style={{padding:"7px 8px",textAlign:"right"}}>${fmt(s.rev,0)}</td>
-                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gp>=0?"#60a5fa":"#f87171",fontWeight:"bold"}}>${fmt(s.gp,0)}</td>
+                        <td style={{padding:"7px 8px",textAlign:"right",color:s.gp>=0?"#2563eb":"#dc2626",fontWeight:"bold"}}>${fmt(s.gp,0)}</td>
                       </tr>
                     );
                   })}
-                  <tr style={{borderTop:"2px solid #334155",background:"#1e293b44"}}>
-                    <td colSpan={3} style={{padding:"9px 8px",color:"#94a3b8",fontWeight:"bold"}}>MONTHLY WS TOTALS</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#fbbf24",fontWeight:"bold"}}>${fmt(wsBlendP)}</td>
+                  <tr style={{borderTop:"2px solid var(--border-accent)",background:"var(--bg-row)"}}>
+                    <td colSpan={3} style={{padding:"9px 8px",color:"var(--text-sec)",fontWeight:"bold"}}>MONTHLY WS TOTALS</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#d97706",fontWeight:"bold"}}>${fmt(wsBlendP)}</td>
                     <td colSpan={3}></td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#4ade80",fontWeight:"bold"}}>${fmt(wsTotGP/wsLbs)}</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#60a5fa",fontWeight:"bold"}}>{fmt(wsBlendGM*100,1)}%</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#16a34a",fontWeight:"bold"}}>${fmt(wsTotGP/wsLbs)}</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#2563eb",fontWeight:"bold"}}>{fmt(wsBlendGM*100,1)}%</td>
                     <td style={{padding:"9px 8px",textAlign:"right",fontWeight:"bold"}}>${fmt(wsTotRev,0)}/mo</td>
-                    <td style={{padding:"9px 8px",textAlign:"right",color:"#60a5fa",fontWeight:"bold"}}>${fmt(wsTotGP,0)}/mo</td>
+                    <td style={{padding:"9px 8px",textAlign:"right",color:"#2563eb",fontWeight:"bold"}}>${fmt(wsTotGP,0)}/mo</td>
                   </tr></tbody>
                 </table>
+              </div>
+              <div style={{marginTop:10,padding:"10px 14px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:6,fontSize:10,color:"#15803d",lineHeight:1.7}}>
+                <span style={{fontWeight:700}}>USDA Range Source:</span> USDA Agricultural Marketing Service (AMS) — Report <b>nw_ls110</b>, "National Monthly Grass-Fed Beef Wholesale Report." These are <b>actual negotiated B2B transaction prices</b> between producers and wholesale buyers, not estimates. The green bar on each slider shows where the current USDA negotiated range falls. Pricing your wholesale inside this range signals market-rate competitiveness to restaurant buyers. Data pulled April 2026.
               </div>
             </div>
 
             {/* Restaurant Buyers */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"16px 18px"}}>
-              <div style={{fontSize:11,color:"#60a5fa",fontFamily:"monospace",fontWeight:"bold",marginBottom:4}}>RESTAURANT BUYER — MAX WHOLESALE PRICE THEY CAN AFFORD
-                <span {...T("maxWS")} style={{fontSize:10,color:"#60a5fa",marginLeft:8,borderBottom:"1px dashed #3b82f6",cursor:"help"}}>how is this calculated?</span>
+            <div style={{background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:8,padding:"16px 18px"}}>
+              <div style={{fontSize:11,color:"#2563eb",fontWeight:"bold",marginBottom:4}}>RESTAURANT BUYER — MAX WHOLESALE PRICE THEY CAN AFFORD
+                <span {...T("maxWS")} style={{fontSize:10,color:"#2563eb",marginLeft:8,borderBottom:"1px dashed #3b82f6",cursor:"help"}}>how is this calculated?</span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
                 {REST_BUYERS.map((buyer,bi)=>(
-                  <div key={bi} style={{background:"#070d18",border:"1px solid #1e293b",borderRadius:8,padding:"14px 16px"}}>
+                  <div key={bi} style={{background:"var(--bg)",border:"1px solid var(--border)",borderRadius:8,padding:"14px 16px"}}>
                     <div style={{marginBottom:10}}>
-                      <div style={{fontSize:12,color:"#e2e8f0",fontWeight:"bold"}}>{buyer.name}</div>
-                      <div style={{fontSize:9,color:"#475569",fontFamily:"monospace"}}>{buyer.ex}</div>
+                      <div style={{fontSize:12,color:"var(--text)",fontWeight:"bold"}}>{buyer.name}</div>
+                      <div style={{fontSize:10,color:"var(--text-sec)"}}>{buyer.ex}</div>
                     </div>
                     {buyer.items.map((item,ii)=>{
                       const mw=maxWS(item.menu,item.oz,item.loss,item.fc);
@@ -1026,20 +1163,20 @@ export default function App(){
                       const sku=SKUS.find(s=>s.id===item.cut);
                       return(
                         <div key={ii} {...T("MAX WHOLESALE PRICE — "+buyer.name+"\n"+sku?.label+" ("+item.oz+"oz served)\n\nMenu price: $"+fmt(item.menu)+"\nFood cost target: "+Math.round(item.fc*100)+"% = $"+fmt(item.menu*item.fc)+" ingredient budget\nCooking loss: "+Math.round(item.loss*100)+"% → raw weight: "+fmt((item.oz/(1-item.loss))/16,2)+"lb needed\n\nMax WS price: $"+fmt(mw)+"/lb\nYour WS price: $"+fmt(myP)+"/lb\n"+(fits?"✓ Fits — $"+fmt(hdroom)+"/lb room to spare":"✗ Over budget by $"+fmt(Math.abs(hdroom))+"/lb"))}
-                          style={{background:fits?"#14532d22":"#1c0a0a22",border:`1px solid ${fits?"#166534":"#7f1d1d"}`,borderRadius:6,padding:"8px 10px",marginBottom:8,cursor:"help"}}>
+                          style={{background:fits?"#dcfce722":"#1c0a0a22",border:`1px solid ${fits?"#86efac":"#fca5a5"}`,borderRadius:6,padding:"8px 10px",marginBottom:8,cursor:"help"}}>
                           <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                             <div>
-                              <div style={{fontSize:11,color:"#e2e8f0",fontWeight:"bold"}}>{sku?.label} {item.oz}oz</div>
-                              <div style={{fontSize:9,color:"#475569"}}>Menu ${fmt(item.menu)} · FC {Math.round(item.fc*100)}% · Loss {Math.round(item.loss*100)}%</div>
+                              <div style={{fontSize:11,color:"var(--text)",fontWeight:"bold"}}>{sku?.label} {item.oz}oz</div>
+                              <div style={{fontSize:10,color:"var(--text-sec)"}}>Menu ${fmt(item.menu)} · FC {Math.round(item.fc*100)}% · Loss {Math.round(item.loss*100)}%</div>
                             </div>
                             <div style={{textAlign:"right"}}>
-                              <div style={{fontSize:9,color:"#94a3b8"}}>max WS</div>
-                              <div style={{fontSize:15,fontWeight:"bold",color:"#fbbf24",fontFamily:"monospace"}}>${fmt(mw)}/lb</div>
+                              <div style={{fontSize:10,color:"var(--text-sec)"}}>max WS</div>
+                              <div style={{fontSize:15,fontWeight:"bold",color:"#d97706"}}>${fmt(mw)}/lb</div>
                             </div>
                           </div>
                           <div style={{display:"flex",justifyContent:"space-between"}}>
-                            <span style={{fontSize:10,color:"#64748b",fontFamily:"monospace"}}>Your WS: <span style={{color:"#fbbf24",fontWeight:"bold"}}>${fmt(myP)}</span></span>
-                            <span style={{fontSize:10,fontWeight:"bold",color:fits?"#4ade80":"#f87171",fontFamily:"monospace"}}>{fits?`✓ +$${fmt(hdroom)} room`:`✗ $${fmt(Math.abs(hdroom))} over`}</span>
+                            <span style={{fontSize:10,color:"var(--text-muted)"}}>Your WS: <span style={{color:"#d97706",fontWeight:"bold"}}>${fmt(myP)}</span></span>
+                            <span style={{fontSize:10,fontWeight:"bold",color:fits?"#16a34a":"#dc2626"}}>{fits?`✓ +$${fmt(hdroom)} room`:`✗ $${fmt(Math.abs(hdroom))} over`}</span>
                           </div>
                         </div>
                       );
@@ -1055,16 +1192,17 @@ export default function App(){
         {tab===6&&(
           <div>
             {/* --- Yield vs Target --- */}
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"16px 18px",marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12,flexWrap:"wrap"}}>
-                <span style={{fontSize:11,color:"#c084fc",fontFamily:"monospace",fontWeight:"bold"}}>YIELD vs TARGET — At Current Volume</span>
-                <span style={{fontSize:10,color:"#374151",fontFamily:"monospace"}}>
+            <div className="card p-5 mb-3.5">
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <Beef size={14} className="text-violet-400"/>
+                <span className="text-[11px] text-violet-600 font-bold">YIELD vs TARGET — At Current Volume</span>
+                <span className="text-[10px] text-stone-500 dark:text-slate-400">
                   {Math.round(lbs/lbPerHead*10)/10} head/mo at {lbs.toLocaleString()} lbs ÷ {lbPerHead} lbs/head · Green = you have enough from cow · Red = you need more cows or less of that cut
                 </span>
               </div>
               <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:11}}>
-                  <thead><tr style={{borderBottom:"2px solid #1e293b"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead><tr style={{borderBottom:"2px solid var(--border)"}}>
                     {[
                       ["SKU","Your model cut"],
                       ["Target Lbs/Mo","Your monthly sales mix × total volume"],
@@ -1077,8 +1215,8 @@ export default function App(){
                       ["Fridge (retail)","Days refrigerated in butcher paper or foam tray"],
                       ["Fridge (cryovac)","Days refrigerated in vacuum seal — for wholesale orders"],
                     ].map(([h,t])=>(
-                      <th key={h} style={{padding:"6px 8px",textAlign:"right",color:"#475569",fontSize:9,textTransform:"uppercase",whiteSpace:"nowrap"}}>
-                        <span {...T(t)} style={{borderBottom:"1px dashed #374151",cursor:"help"}}>{h}</span>
+                      <th key={h} style={{padding:"6px 8px",textAlign:"right",color:"var(--text-sec)",fontSize:10,textTransform:"uppercase",whiteSpace:"nowrap"}}>
+                        <span {...T(t)} style={{borderBottom:"1px dashed var(--border-dashed)",cursor:"help"}}>{h}</span>
                       </th>
                     ))}</tr></thead>
                   <tbody>
@@ -1093,34 +1231,34 @@ export default function App(){
                       const headsForCut = target / ((cut.yLo + cut.yHi) / 2);
                       const isAlert = cut.id === "hanger-steak";
                       return(
-                        <tr key={s.id} style={{borderBottom:"1px solid #1a2740",background:isAlert?"#1c0a0a33":i%2===0?"#0c162833":"transparent"}}>
+                        <tr key={s.id} style={{borderBottom:"1px solid var(--border-light)",background:isAlert?"#fef2f233":i%2===0?"var(--bg-row)":"transparent"}}>
                           <td style={{padding:"7px 8px",textAlign:"right"}}>
-                            <div style={{fontWeight:"bold",color:isAlert?"#f87171":"#e2e8f0"}}>{s.label}</div>
-                            {isAlert&&<div style={{fontSize:9,color:"#f87171"}}>⚠ only 1/animal</div>}
+                            <div style={{fontWeight:"bold",color:isAlert?"#dc2626":"var(--text)"}}>{s.label}</div>
+                            {isAlert&&<div style={{fontSize:10,color:"#dc2626"}}>⚠ only 1/animal</div>}
                           </td>
-                          <td style={{padding:"7px 8px",textAlign:"right",color:"#c084fc"}}>{fmt(target,0)} lb</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:dc("#9333ea")}}>{fmt(target,0)} lb</td>
                           <td style={{padding:"7px 8px",textAlign:"right"}}>
-                            <span style={{color:"#64748b"}}>{cut.yLo}–{cut.yHi} lbs</span>
-                            <div style={{fontSize:9,color:"#374151"}}>{cut.wholeCowQty} {cut.unit}/cow</div>
+                            <span style={{color:"var(--text)"}}>{cut.yLo}–{cut.yHi} lbs</span>
+                            <div style={{fontSize:10,color:"var(--text-sec)"}}>{cut.wholeCowQty} {cut.unit}/cow</div>
                           </td>
-                          <td {...T("YIELD AT CURRENT HEADS\n"+fmt(headsThisMonth,1)+" heads × "+fmt((cut.yLo+cut.yHi)/2,1)+" avg lbs/head = "+fmt(yieldMid,0)+" lbs available")} style={{padding:"7px 8px",textAlign:"right",color:"#fbbf24",cursor:"help"}}>{fmt(yieldMid,0)} lb</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",color:delta>=0?"#4ade80":"#f87171",fontWeight:"bold"}}>
+                          <td {...T("YIELD AT CURRENT HEADS\n"+fmt(headsThisMonth,1)+" heads × "+fmt((cut.yLo+cut.yHi)/2,1)+" avg lbs/head = "+fmt(yieldMid,0)+" lbs available")} style={{padding:"7px 8px",textAlign:"right",color:dc("#d97706"),cursor:"help"}}>{fmt(yieldMid,0)} lb</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:delta>=0?dc("#16a34a"):dc("#dc2626"),fontWeight:"bold"}}>
                             {delta>=0?"+":""}{fmt(delta,0)} lb
-                            <div style={{fontSize:9,color:delta>=0?"#166534":"#7f1d1d"}}>{delta>=0?"surplus":"SHORT"}</div>
+                            <div style={{fontSize:10,color:delta>=0?"#86efac":"#fca5a5"}}>{delta>=0?"surplus":"SHORT"}</div>
                           </td>
-                          <td style={{padding:"7px 8px",textAlign:"right",color:"#64748b"}}>{fmt(headsForCut,1)} hd</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",fontSize:10,color:"#94a3b8",maxWidth:140}}>{cut.butcher.split("·")[0].trim()}</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",fontSize:10,color:"#4ade80",maxWidth:140}}>{cut.ws.split("·")[0].trim()}</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",color:cut.rfRef<=5?"#f59e0b":"#64748b"}}>{cut.rfRef}d</td>
-                          <td style={{padding:"7px 8px",textAlign:"right",color:"#22c55e"}}>{cut.rfVac}d</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:"var(--text)"}}>{fmt(headsForCut,1)} hd</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontSize:10,color:"var(--text)",maxWidth:140}}>{cut.butcher.split("·")[0].trim()}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",fontSize:10,color:dc("#16a34a"),maxWidth:140}}>{cut.ws.split("·")[0].trim()}</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:cut.rfRef<=5?dc("#b45309"):"var(--text)"}}>{cut.rfRef}d</td>
+                          <td style={{padding:"7px 8px",textAlign:"right",color:dc("#15803d")}}>{cut.rfVac}d</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-              <div style={{marginTop:10,background:"#070d18",borderRadius:5,padding:"8px 12px",fontSize:9,color:"#374151",fontFamily:"monospace",lineHeight:1.8}}>
-                ⚠ <b style={{color:"#f87171"}}>Hanger steak:</b> Only 1 per animal (0.75–1 lb). At {Math.round(lbs/lbPerHead)} head/mo you have ~{fmt(Math.round(lbs/lbPerHead)*0.875,0)} lbs available — but your SKU mix targets {fmt(skuRows.find(s=>s.id==="hanger")?.spLbs||0,0)} lbs. Consider reducing hanger mix % or sourcing from additional animals.
+              <div style={{marginTop:10,background:"var(--bg)",borderRadius:5,padding:"8px 12px",fontSize:10,color:"var(--text-label)",lineHeight:1.8}}>
+                ⚠ <b style={{color:"#dc2626"}}>Hanger steak:</b> Only 1 per animal (0.75–1 lb). At {Math.round(lbs/lbPerHead)} head/mo you have ~{fmt(Math.round(lbs/lbPerHead)*0.875,0)} lbs available — but your SKU mix targets {fmt(skuRows.find(s=>s.id==="hanger")?.spLbs||0,0)} lbs. Consider reducing hanger mix % or sourcing from additional animals.
               </div>
             </div>
 
@@ -1128,30 +1266,30 @@ export default function App(){
             {PRIMALS.map(primal=>{
               const cuts = JMC_CUTS.filter(c=>c.primal===primal);
               return(
-                <div key={primal} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:8,padding:"14px 18px",marginBottom:12}}>
-                  <div style={{fontSize:11,color:"#f59e0b",fontFamily:"monospace",fontWeight:"bold",marginBottom:10,borderBottom:"1px solid #1e293b",paddingBottom:6}}>
+                <div key={primal} className="card p-4 mb-3">
+                  <div className="section-header">
                     {primal.toUpperCase()}
-                    <span style={{fontSize:9,color:"#475569",marginLeft:8,fontWeight:"normal"}}>{cuts.length} cut{cuts.length!==1?"s":""} from this primal</span>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400 ml-2 font-normal">{cuts.length} cut{cuts.length!==1?"s":""} from this primal</span>
                   </div>
                   <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"monospace",fontSize:10}}>
-                      <thead><tr style={{borderBottom:"1px solid #1e293b"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+                      <thead><tr style={{borderBottom:"1px solid var(--border)"}}>
                         {["Cut","Unit Weight","Yield / Whole Cow","Qty/Cow","Retail Packaging","Wholesale Packaging","Fridge Retail","Fridge Vac","Frozen","Notes"].map(h=>(
-                          <th key={h} style={{padding:"5px 8px",textAlign:"left",color:"#475569",fontSize:8,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                          <th key={h} style={{padding:"5px 8px",textAlign:"left",color:"var(--text-sec)",fontSize:8,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                         ))}</tr></thead>
                       <tbody>
                         {cuts.map((cut,i)=>(
-                          <tr key={cut.id} style={{borderBottom:"1px solid #1a2740",background:i%2===0?"#0c162833":"transparent",borderLeft:cut.note?"3px solid #f87171":"3px solid transparent"}}>
-                            <td style={{padding:"6px 8px",color:cut.note?"#f87171":"#e2e8f0",fontWeight:"bold",whiteSpace:"nowrap"}}>{cut.name}</td>
-                            <td style={{padding:"6px 8px",color:"#64748b",whiteSpace:"nowrap"}}>{cut.unitWeight}</td>
-                            <td style={{padding:"6px 8px",color:"#fbbf24",whiteSpace:"nowrap"}}>{cut.yLo}–{cut.yHi} lbs</td>
-                            <td style={{padding:"6px 8px",color:"#94a3b8",whiteSpace:"nowrap"}}>{cut.wholeCowQty} {cut.unit}</td>
-                            <td style={{padding:"6px 8px",color:"#60a5fa",maxWidth:180,fontSize:9}}>{cut.butcher}</td>
-                            <td style={{padding:"6px 8px",color:"#4ade80",maxWidth:180,fontSize:9}}>{cut.ws}</td>
-                            <td style={{padding:"6px 8px",color:cut.rfRef<=5?"#f59e0b":"#64748b",whiteSpace:"nowrap"}}>{cut.rfRef}d</td>
-                            <td style={{padding:"6px 8px",color:"#22c55e",whiteSpace:"nowrap"}}>{cut.rfVac}d</td>
-                            <td style={{padding:"6px 8px",color:"#475569",whiteSpace:"nowrap"}}>{cut.frVac}d</td>
-                            <td style={{padding:"6px 8px",fontSize:9,color:"#f87171",maxWidth:200}}>{cut.note||""}</td>
+                          <tr key={cut.id} style={{borderBottom:"1px solid var(--border-light)",background:i%2===0?"var(--bg-row)":"transparent",borderLeft:cut.note?"3px solid #dc2626":"3px solid transparent"}}>
+                            <td style={{padding:"6px 8px",color:cut.note?"#dc2626":"var(--text)",fontWeight:"bold",whiteSpace:"nowrap"}}>{cut.name}</td>
+                            <td style={{padding:"6px 8px",color:"var(--text)",whiteSpace:"nowrap"}}>{cut.unitWeight}</td>
+                            <td style={{padding:"6px 8px",color:dc("#d97706"),whiteSpace:"nowrap"}}>{cut.yLo}–{cut.yHi} lbs</td>
+                            <td style={{padding:"6px 8px",color:"var(--text)",whiteSpace:"nowrap"}}>{cut.wholeCowQty} {cut.unit}</td>
+                            <td style={{padding:"6px 8px",color:dc("#2563eb"),maxWidth:180,fontSize:10}}>{cut.butcher}</td>
+                            <td style={{padding:"6px 8px",color:dc("#16a34a"),maxWidth:180,fontSize:10}}>{cut.ws}</td>
+                            <td style={{padding:"6px 8px",color:cut.rfRef<=5?dc("#b45309"):"var(--text)",whiteSpace:"nowrap"}}>{cut.rfRef}d</td>
+                            <td style={{padding:"6px 8px",color:dc("#15803d"),whiteSpace:"nowrap"}}>{cut.rfVac}d</td>
+                            <td style={{padding:"6px 8px",color:"var(--text)",whiteSpace:"nowrap"}}>{cut.frVac}d</td>
+                            <td style={{padding:"6px 8px",fontSize:10,color:"#dc2626",maxWidth:200}}>{cut.note||""}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1161,9 +1299,9 @@ export default function App(){
               );
             })}
 
-            <div style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:7,padding:"10px 14px",fontSize:9,color:"#475569",fontFamily:"monospace",lineHeight:1.8}}>
-              <b style={{color:"#f59e0b"}}>SHELF LIFE KEY</b> · Fridge Retail = butcher paper or foam tray (open case) · Fridge Vac = cryovac/vacuum seal (wholesale ready) · Frozen = frozen in any packaging ·
-              <b style={{color:"#f87171",marginLeft:4}}>Red-bordered rows have special handling requirements</b> · All shelf life in days · Source: jmc_cuts_data.js · USDA FSIS guidelines
+            <div style={{background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:7,padding:"10px 14px",fontSize:10,color:"var(--text-sec)",lineHeight:1.8}}>
+              <b style={{color:"#b45309"}}>SHELF LIFE KEY</b> · Fridge Retail = butcher paper or foam tray (open case) · Fridge Vac = cryovac/vacuum seal (wholesale ready) · Frozen = frozen in any packaging ·
+              <b style={{color:"#dc2626",marginLeft:4}}>Red-bordered rows have special handling requirements</b> · All shelf life in days · Source: jmc_cuts_data.js · USDA FSIS guidelines
             </div>
           </div>
         )}
@@ -1172,50 +1310,51 @@ export default function App(){
         {tab===7&&(
           <div>
             {/* KPI Cards */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
+            <div className="grid grid-cols-3 gap-3 mb-4">
               {[
-                {label:"Total Startup Cost",val:money(suStartupCost),color:"#f59e0b",sub:"One-time launch expenses"},
-                {label:"Monthly Burn",val:money(suMonthlyBurn),color:"#60a5fa",sub:"Recurring operating costs"},
-                {label:"12-Month Carry",val:money(suMonthlyBurn*12),color:"#c084fc",sub:"Annual operating cost projection"},
+                {label:"Total Startup Cost",val:money(suStartupCost),color:"#b45309",sub:"One-time launch expenses",glow:"glow-amber",Icon:DollarSign},
+                {label:"Monthly Burn",val:money(suMonthlyBurn),color:"#2563eb",sub:"Recurring operating costs",glow:"glow-blue",Icon:TrendingUp},
+                {label:"12-Month Carry",val:money(suMonthlyBurn*12),color:"#9333ea",sub:"Annual operating cost projection",glow:"glow-purple",Icon:Percent},
               ].map(k=>(
-                <div key={k.label} style={{background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"18px 20px"}}>
-                  <div style={{fontSize:9,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em"}}>{k.label}</div>
-                  <div style={{fontSize:24,fontWeight:"bold",color:k.color,fontFamily:"monospace",marginTop:6}}>{k.val}</div>
-                  <div style={{fontSize:10,color:"#374151",marginTop:4}}>{k.sub}</div>
+                <div key={k.label} className={`kpi-card ${k.glow}`}>
+                  <k.Icon size={20} className="absolute top-4 right-4 opacity-15" style={{color:k.color}}/>
+                  <div className="text-[10px] text-stone-500 dark:text-slate-400 uppercase tracking-wider font-semibold">{k.label}</div>
+                  <div className="text-2xl font-bold mt-1.5" style={{color:k.color}}>{k.val}</div>
+                  <div className="text-[10px] text-slate-700 dark:text-slate-300 mt-1">{k.sub}</div>
                 </div>
               ))}
             </div>
 
             {/* Reset Button */}
-            <div style={{marginBottom:14,textAlign:"right"}}>
-              <button onClick={()=>setSuData(buildStartupState())} style={{padding:"7px 16px",borderRadius:6,cursor:"pointer",fontFamily:"monospace",fontSize:11,border:"1px solid #374151",background:"#1e293b",color:"#94a3b8"}}>
+            <div className="mb-3.5 text-right">
+              <button onClick={()=>setSuData(buildStartupState())} className="btn-ghost">
                 Reset All Fields
               </button>
             </div>
 
             {/* Section Cards */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div className="grid grid-cols-2 gap-3.5">
               {STARTUP_SECTIONS.map(sec=>(
-                <div key={sec.key} style={{background:"#0c1628",border:`1px solid ${sec.monthly?"#1e3a5f":"#1e293b"}`,borderRadius:10,padding:"18px 20px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,borderBottom:"1px solid #1e293b",paddingBottom:10}}>
+                <div key={sec.key} className="card p-5" style={{borderColor:sec.monthly?"#bfdbfe":undefined}}>
+                  <div className="flex justify-between items-start mb-3.5 pb-2.5 border-b border-surface-border">
                     <div>
-                      <div style={{fontSize:12,fontWeight:"bold",color:"#e2e8f0"}}>{sec.title}</div>
-                      <div style={{fontSize:9,color:sec.monthly?"#60a5fa":"#475569",fontFamily:"monospace",marginTop:2}}>
+                      <div className="text-sm font-semibold text-stone-700 dark:text-slate-200">{sec.title}</div>
+                      <div className="text-[10px] mt-0.5" style={{color:sec.monthly?"#2563eb":"#666666"}}>
                         {sec.monthly?"Monthly operating cost":"One-time startup cost"}
                       </div>
                     </div>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:8,color:"#475569",textTransform:"uppercase",fontFamily:"monospace",letterSpacing:"0.05em"}}>Section Total</div>
-                      <div style={{fontSize:16,fontWeight:"bold",color:sec.monthly?"#60a5fa":"#f59e0b",fontFamily:"monospace"}}>{money(suTotals[sec.key])}</div>
+                    <div className="text-right">
+                      <div className="text-[9px] text-stone-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Section Total</div>
+                      <div className="text-base font-bold" style={{color:sec.monthly?"#2563eb":"#b45309"}}>{money(suTotals[sec.key])}</div>
                     </div>
                   </div>
                   {sec.fields.map(([fieldKey,label])=>(
-                    <div key={fieldKey} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #1a2740"}}>
-                      <label style={{fontSize:11,color:"#94a3b8",fontFamily:"monospace"}}>{label}</label>
+                    <div key={fieldKey} className="data-row">
+                      <label className="text-[11px] text-stone-600 dark:text-slate-300">{label}</label>
                       <input type="number" inputMode="decimal" min="0" step="any" placeholder="0"
                         value={suData[sec.key][fieldKey]}
                         onChange={e=>updateSuField(sec.key,fieldKey,e.target.value)}
-                        style={{width:110,background:"#070d18",color:"#e2e8f0",border:"1px solid #374151",borderRadius:5,padding:"5px 10px",fontFamily:"monospace",fontSize:12,textAlign:"right",outline:"none"}}/>
+                        className="input-field w-28 text-xs"/>
                     </div>
                   ))}
                 </div>
@@ -1223,14 +1362,14 @@ export default function App(){
             </div>
 
             {/* Notes */}
-            <div style={{marginTop:16,background:"#0c1628",border:"1px solid #1e293b",borderRadius:10,padding:"16px 20px"}}>
-              <div style={{fontSize:11,color:"#e2e8f0",fontWeight:"bold",marginBottom:10}}>Notes</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div style={{background:"#070d18",borderRadius:7,padding:"12px 14px",fontSize:10,color:"#64748b",fontFamily:"monospace",lineHeight:1.6}}>
-                  <b style={{color:"#f59e0b"}}>Startup costs</b> are your one-time launch expenses like buildout, equipment, permits, and inventory.
+            <div className="card p-5 mt-4">
+              <div className="text-xs text-stone-700 dark:text-slate-200 font-semibold mb-2.5">Notes</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg p-3.5 text-[11px] text-stone-600 dark:text-slate-300 leading-relaxed" style={{background:"var(--bg-surface)"}}>
+                  <b className="text-brand-500">Startup costs</b> are your one-time launch expenses like buildout, equipment, permits, and inventory.
                 </div>
-                <div style={{background:"#070d18",borderRadius:7,padding:"12px 14px",fontSize:10,color:"#64748b",fontFamily:"monospace",lineHeight:1.6}}>
-                  <b style={{color:"#60a5fa"}}>Monthly burn</b> is what it costs you to keep the shop open each month before product margin is added.
+                <div className="rounded-lg p-3.5 text-[11px] text-stone-600 dark:text-slate-300 leading-relaxed" style={{background:"var(--bg-surface)"}}>
+                  <b className="text-blue-600">Monthly burn</b> is what it costs you to keep the shop open each month before product margin is added.
                 </div>
               </div>
             </div>
